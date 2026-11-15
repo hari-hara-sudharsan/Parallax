@@ -8,38 +8,42 @@ import {RuleType, SkipReason} from "../libraries/RuleTypes.sol";
 /// @dev TripwireReactive subscribes to these events (topic0 = the event selectors below), so their
 ///      signatures and indexed layout are part of the cross-chain protocol. Change them in one place only.
 interface ITripwireExecutor {
-    /// @notice A rule was created and its tokens deposited.
+    /// @notice A rule was created (tokens deposited, or LP position NFT handed over).
     /// @dev Log layout (LOG4): topic1 = ruleId, topic2 = owner, topic3 = poolId,
-    ///      data = abi.encode(ruleType, triggerTick, triggerBelow, zeroForOne, amountIn).
+    ///      data = abi.encode(ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId).
+    ///      Fires when tick <= lowerTick || tick >= upperTick (NO_LOWER / NO_UPPER disable a side).
     event RuleCreated(
         uint256 indexed ruleId,
         address indexed owner,
         bytes32 indexed poolId,
         RuleType ruleType,
-        int24 triggerTick,
-        bool triggerBelow,
+        int24 lowerTick,
+        int24 upperTick,
         bool zeroForOne,
-        uint128 amountIn
+        uint128 amountIn,
+        uint256 positionId
     );
 
-    /// @notice The owner cancelled the rule and was refunded.
+    /// @notice The owner cancelled the rule and got the deposit / position back.
     event RuleCancelled(uint256 indexed ruleId, address indexed owner);
 
-    /// @notice The rule fired: tokens were swapped and the proceeds sent to the owner.
-    /// @param tick Pool tick at execution time (re-read on-chain, not trusted from the callback).
-    /// @param originTxHash Hash of the origin Swap tx that tripped the rule (for the latency proof).
+    /// @notice The rule fired and its action completed.
+    /// @param tick Pool tick after execution (re-read on-chain, never trusted from the callback).
+    /// @param amount0Out currency0 sent to the owner (swap proceeds or refund, or withdrawn liquidity).
+    /// @param amount1Out currency1 sent to the owner.
+    /// @param originTxHash Hash of the origin Swap tx that tripped the rule (the latency proof link).
     /// @param executedAt block.timestamp of execution (T1 in the latency measurement).
     event RuleExecuted(
         uint256 indexed ruleId,
         address indexed owner,
         int24 tick,
-        uint256 amountIn,
-        uint256 amountOut,
+        uint256 amount0Out,
+        uint256 amount1Out,
         uint256 originTxHash,
         uint256 executedAt
     );
 
-    /// @notice A callback arrived but did not execute; the rule stays (or already is) final/active.
+    /// @notice A callback arrived but did not execute (see SkipReason). Non-final: the reactive side re-arms.
     event RuleSkipped(uint256 indexed ruleId, SkipReason reason, int24 tick, uint256 originTxHash);
 
     /// @notice Callback entrypoint, called by the Reactive Callback Proxy.

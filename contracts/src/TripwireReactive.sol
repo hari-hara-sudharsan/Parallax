@@ -27,7 +27,7 @@ contract TripwireReactive is AbstractReactive {
     event ExecutorSet(address indexed executor);
     event PoolWatched(bytes32 indexed poolId);
     event PoolUnwatched(bytes32 indexed poolId);
-    event RuleMirrored(uint256 indexed ruleId, bytes32 indexed poolId, int24 triggerTick, bool triggerBelow);
+    event RuleMirrored(uint256 indexed ruleId, bytes32 indexed poolId, int24 lowerTick, int24 upperTick);
     event RuleRemoved(uint256 indexed ruleId, bytes32 indexed poolId);
     event RuleRearmed(uint256 indexed ruleId);
     event MirrorFull(uint256 indexed ruleId, bytes32 indexed poolId);
@@ -43,7 +43,7 @@ contract TripwireReactive is AbstractReactive {
     /// @dev Executor events (enums encode as uint8). A unit test asserts these equal the
     ///      `ITripwireExecutor.<Event>.selector` values so the two contracts can never drift apart.
     uint256 public constant RULE_CREATED_TOPIC0 =
-        uint256(keccak256("RuleCreated(uint256,address,bytes32,uint8,int24,bool,bool,uint128)"));
+        uint256(keccak256("RuleCreated(uint256,address,bytes32,uint8,int24,int24,bool,uint128,uint256)"));
     uint256 public constant RULE_CANCELLED_TOPIC0 = uint256(keccak256("RuleCancelled(uint256,address)"));
     uint256 public constant RULE_EXECUTED_TOPIC0 =
         uint256(keccak256("RuleExecuted(uint256,address,int24,uint256,uint256,uint256,uint256)"));
@@ -69,10 +69,13 @@ contract TripwireReactive is AbstractReactive {
     address public executor;
 
     // ── Rule mirror ─────────────────────────────────────────────────────────
+    /// @dev Fires when tick <= lowerTick || tick >= upperTick (same rule as the executor; one side may be
+    ///      disabled with type(int24).min / type(int24).max). One struct covers stop-loss, take-profit,
+    ///      brackets and LP range guards.
     struct MirrorRule {
         bytes32 poolId;
-        int24 triggerTick;
-        bool triggerBelow;
+        int24 lowerTick;
+        int24 upperTick;
         bool exists;
         uint64 pendingSince; // 0 = armed; otherwise block.timestamp of the callback request
         uint32 index; //        position in poolRules[poolId] (for O(1) removal)
@@ -156,7 +159,9 @@ contract TripwireReactive is AbstractReactive {
         bytes32 poolId = bytes32(log_.topic3);
         if (mirror[ruleId].exists) return; // duplicate delivery
 
-        (, int24 triggerTick, bool triggerBelow,,) = abi.decode(log_.data, (RuleType, int24, bool, bool, uint128));
+        // data = (ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId)
+        (, int24 lowerTick, int24 upperTick,,,) =
+            abi.decode(log_.data, (RuleType, int24, int24, bool, uint128, uint256));
 
         uint256[] storage list = _poolRules[poolId];
         if (list.length >= MAX_RULES_PER_POOL) {
@@ -167,14 +172,14 @@ contract TripwireReactive is AbstractReactive {
 
         mirror[ruleId] = MirrorRule({
             poolId: poolId,
-            triggerTick: triggerTick,
-            triggerBelow: triggerBelow,
+            lowerTick: lowerTick,
+            upperTick: upperTick,
             exists: true,
             pendingSince: 0,
             index: uint32(list.length)
         });
         list.push(ruleId);
-        emit RuleMirrored(ruleId, poolId, triggerTick, triggerBelow);
+        emit RuleMirrored(ruleId, poolId, lowerTick, upperTick);
     }
 
     /// @dev Hot path: a swap happened in a watched pool. Check its (≤25) rules against the new tick.
@@ -194,7 +199,7 @@ contract TripwireReactive is AbstractReactive {
 
             bool armed = m.pendingSince == 0 || block.timestamp >= m.pendingSince + PENDING_TIMEOUT;
             if (!armed) continue;
-            if (!(m.triggerBelow ? tick <= m.triggerTick : tick >= m.triggerTick)) continue;
+            if (tick > m.lowerTick && tick < m.upperTick) continue; // still inside the safe band
 
             m.pendingSince = uint64(block.timestamp); // de-dupe: one in-flight callback per rule
             _requestExecute(ruleId, tick, log_.txHash);
