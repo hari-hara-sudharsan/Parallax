@@ -6,6 +6,7 @@ import {DemoBase} from "./DemoBase.s.sol";
 import {TripwireExecutor} from "../src/TripwireExecutor.sol";
 import {IPayable} from "reactive-lib-omni/interfaces/IPayable.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 
 /// @notice Phase 2, step B (on UNICHAIN SEPOLIA): deploy TripwireExecutor bound to the Callback Proxy
 ///         and to the TripwireReactive address from step A (stored immutably, so get it right).
@@ -17,12 +18,15 @@ contract DeployExecutor is DemoBase {
         (uint256 pk,) = _deployer();
         address proxy = vm.envAddress("UNICHAIN_CALLBACK_PROXY");
         address poolManager = vm.envAddress("POOL_MANAGER");
+        address positionManager = vm.envAddress("POSITION_MANAGER");
         address reactive = _readAddressFrom(LASNA, "tripwireReactive");
         uint256 funding = vm.envOr("EXECUTOR_FUNDING", uint256(0.01 ether));
 
         vm.startBroadcast(pk);
         TripwireExecutor executor =
-            new TripwireExecutor{value: funding}(IPayable(payable(proxy)), reactive, IPoolManager(poolManager));
+            new TripwireExecutor{value: funding}(
+            IPayable(payable(proxy)), reactive, IPoolManager(poolManager), IPositionManager(positionManager)
+        );
         vm.stopBroadcast();
 
         console2.log("TripwireExecutor (Unichain Sepolia):", address(executor));

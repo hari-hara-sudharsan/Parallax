@@ -49,7 +49,9 @@ case "$cmd" in
   deploy-executor)  uni_script   script/06_DeployExecutor.s.sol:DeployExecutor ;;
   set-executor)     lasna_script script/07_SetExecutor.s.sol:SetExecutor ;;
   deploy-tripwire)  "$0" deploy-reactive && "$0" deploy-executor && "$0" set-executor && "$0" debts ;;
-  create-stop-loss) uni_script   script/08_CreateStopLoss.s.sol:CreateStopLoss ;;
+  create-stop-loss)   RULE_KIND=stop-loss   uni_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
+  create-take-profit) RULE_KIND=take-profit uni_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
+  create-range-guard) uni_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
 
   # Top-ups, credited to reserves via depositTo (the docs' recommended route).
   fund-reactive)    # ./tw.sh fund-reactive 1ether
@@ -78,7 +80,7 @@ case "$cmd" in
 
   rule)             # ./tw.sh rule 1   → on-chain status of a rule
     E=$(saved 1301 tripwireExecutor)
-    cast call "$E" "getRule(uint256)((address,uint8,uint8,bool,bool,int24,uint16,uint128,bytes32,uint64))" "${1:?ruleId}" \
+    cast call "$E" "getRule(uint256)((address,uint8,uint8,bool,int24,int24,uint16,uint128,uint64,bytes32,uint256))" "${1:?ruleId}" \
       --rpc-url "$UNICHAIN_SEPOLIA_RPC"
     echo "(status: 1=ACTIVE 2=EXECUTED 3=CANCELLED)" ;;
 
@@ -156,7 +158,9 @@ Tripwire tasks (./tw.sh <task>  or  make <task>)
 
 Core loop (Phase 2):
   deploy-tripwire   deploy-reactive (Lasna) + deploy-executor (Unichain) + set-executor (Lasna) + debts
-  create-stop-loss  sell SL_AMOUNT mWETH (default 1) if WETH drops SL_DROP_BPS (default 300 = 3%)
+  create-stop-loss    sell RULE_AMOUNT mWETH (default 1) if WETH drops RULE_MOVE_BPS (default 300 = 3%)
+  create-take-profit  sell RULE_AMOUNT mWETH if WETH rises RULE_MOVE_BPS
+  create-range-guard  mint a narrow LP position (±RG_WIDTH_TICKS, default 600) and guard it
   fund-reactive [amt]   top up TripwireReactive reserves (lREACT)
   fund-executor [amt]   top up TripwireExecutor callback reserves (ETH)
   debts             balances / reserves / debt on both sides
