@@ -10,7 +10,7 @@ import { useChain } from "@/hooks/useChain";
 import { boundsToPrices, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
 import { Button, Chip, Panel } from "./ui";
 
-const TYPE_LABEL = ["Stop-loss", "Take-profit", "Range guard"];
+const TYPE_LABEL = ["Stop-loss", "Take-profit", "Range guard", "Trailing stop"];
 
 function StatusChip({ r }: { r: RuleView }) {
   if (r.status === 2) return <Chip tone="executed">Executed</Chip>;
@@ -23,11 +23,12 @@ function describe(r: RuleView): string {
   if (r.ruleType === 2) {
     // Range guard bounds are [tickLower-1, tickUpper]; show the position's price range.
     const [a, b] = [tickToPrice(r.lowerTick + 1), tickToPrice(r.upperTick)].sort((x, y) => x - y);
-    return `LP #${r.positionId} · withdraw outside $${fmtUsd(a, 0)}–$${fmtUsd(b, 0)}`;
+    return `LP #${r.positionId} · ${r.recenter ? "re-centre" : "withdraw"} outside $${fmtUsd(a, 0)}–$${fmtUsd(b, 0)}`;
   }
   const { below, above } = boundsToPrices(r.lowerTick, r.upperTick);
   const amt = fmtToken(Number(formatUnits(r.amountIn, WETH_DECIMALS)), 4);
   const when = [below && `≤ $${fmtUsd(below)}`, above && `≥ $${fmtUsd(above)}`].filter(Boolean).join(" or ");
+  if (r.ruleType === 3) return `Sell ${amt} mWETH · trails ${r.trailTicks / 100}% · stop now ${when}`;
   return `Sell ${amt} mWETH if price ${when}`;
 }
 

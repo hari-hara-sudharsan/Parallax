@@ -14,11 +14,12 @@ import { WETH_DECIMALS, WETH_IS_CURRENCY0, poolKeyOf, type ChainDeployment } fro
 import { boundsForPrice, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
 import { Button, Field, Panel, TxLink, cx, inputClass } from "./ui";
 
-type Tab = "stop" | "take" | "range";
+type Tab = "stop" | "take" | "trail" | "range";
 const TABS: { id: Tab; label: string; blurb: string }[] = [
   { id: "stop", label: "Stop-loss", blurb: "Sell if the price falls to your level" },
   { id: "take", label: "Take-profit", blurb: "Sell if the price rises to your target" },
-  { id: "range", label: "Range guard", blurb: "Pull LP liquidity when it goes out of range" },
+  { id: "trail", label: "Trailing", blurb: "Sell if the price falls a set % below its best level; the stop follows the price up" },
+  { id: "range", label: "Range guard", blurb: "Keep LP liquidity in range: re-centre it, or pull it out" },
 ];
 const SLIPPAGE = [50, 100, 300, 500];
 
@@ -26,7 +27,7 @@ export function CreateRule() {
   const [tab, setTab] = useState<Tab>("stop");
   return (
     <Panel title="Create a rule">
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-bg p-1" role="tablist">
+      <div className="grid grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -43,7 +44,9 @@ export function CreateRule() {
         ))}
       </div>
       <p className="mt-3 text-xs text-faint">{TABS.find((t) => t.id === tab)!.blurb}</p>
-      <div className="mt-5">{tab === "range" ? <RangeGuardForm /> : <PriceRuleForm kind={tab} key={tab} />}</div>
+      <div className="mt-5">
+        {tab === "range" ? <RangeGuardForm /> : tab === "trail" ? <TrailingForm /> : <PriceRuleForm kind={tab} key={tab} />}
+      </div>
     </Panel>
   );
 }
@@ -182,6 +185,108 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Trailing stop
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TRAILS = [100, 200, 300, 500]; // ticks ≈ bps: 1%, 2%, 3%, 5%
+
+function TrailingForm() {
+  const { chain } = useChain();
+  const { address } = useAccount();
+  const { price } = usePool(chain);
+  const { weth } = useBalances(address, chain);
+  const flow = useTxFlow();
+  const [amount, setAmount] = useState("1");
+  const [trail, setTrail] = useState(300);
+  const [slippage, setSlippage] = useState(300);
+
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: chain.mockWETH,
+    abi: mockErc20Abi,
+    functionName: "allowance",
+    args: [address!, chain.executor],
+    chainId: chain.chainId,
+    query: { enabled: Boolean(address) },
+  });
+
+  const a = Number(amount);
+  const insufficient = weth !== undefined && a > weth;
+  const valid = a > 0 && !insufficient;
+  const startStop = price !== undefined ? price * (1 - trail / 10_000) : undefined;
+
+  async function submit() {
+    if (!address || !valid) return;
+    const amountIn = parseUnits(amount, WETH_DECIMALS);
+    const steps: Step[] = [];
+    if ((allowance ?? 0n) < amountIn) {
+      steps.push({
+        label: "Approve mWETH",
+        request: { address: chain.mockWETH, abi: mockErc20Abi, functionName: "approve", args: [chain.executor, amountIn], chainId: chain.chainId },
+      });
+    }
+    // Selling WETH; its price moves WITH the tick iff WETH is currency0, so the stop sits below the tick then.
+    steps.push({
+      label: "Arm trailing stop",
+      request: {
+        address: chain.executor,
+        abi: parallaxExecutorAbi,
+        functionName: "createTrailingStop",
+        args: [poolKeyOf(chain), WETH_IS_CURRENCY0, WETH_IS_CURRENCY0, trail, amountIn, slippage],
+        chainId: chain.chainId,
+      },
+    });
+    await flow.run(steps);
+    refetchAllowance();
+  }
+
+  return (
+    <div className="space-y-4">
+      <Field label="Trail distance" hint={price ? `now $${fmtUsd(price)}` : undefined}>
+        <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
+          {TRAILS.map((t) => (
+            <button key={t} type="button" onClick={() => setTrail(t)} className={cx("num rounded-lg text-xs transition", trail === t ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}>
+              {t / 100}%
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Amount" hint={weth !== undefined ? `bal ${fmtToken(weth, 3)}` : undefined}>
+          <div className="relative">
+            <input className={cx(inputClass, "pr-16", insufficient && "border-danger/60")} inputMode="decimal" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-faint">mWETH</span>
+          </div>
+        </Field>
+        <Field label="Max slippage">
+          <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
+            {SLIPPAGE.map((s) => (
+              <button key={s} type="button" onClick={() => setSlippage(s)} className={cx("num rounded-lg text-xs transition", slippage === s ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}>
+                {s / 100}%
+              </button>
+            ))}
+          </div>
+        </Field>
+      </div>
+
+      <Preview>
+        {insufficient ? (
+          <span className="text-danger">Not enough mWETH. Grab some from the demo panel.</span>
+        ) : (
+          <>
+            Sell <b className="num text-ink">{amount || "0"} mWETH</b> if the price falls <b className="num text-ink">{trail / 100}%</b> below
+            its best level from now on. The stop starts at <b className="num text-ink">${startStop ? fmtUsd(startStop) : "…"}</b> and only
+            moves up: Reactive asks to raise it as the price climbs, and the executor checks every raise against the live price.
+          </>
+        )}
+      </Preview>
+
+      <SubmitRow disabled={!address || !valid || flow.busy} label={!address ? "Connect a wallet" : "Arm trailing stop"} onClick={submit} flow={flow} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Range guard
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -229,7 +334,8 @@ function RangeGuardForm() {
   const flow = useTxFlow();
   const { data: myPositions } = useMyPositions(chain, address);
   const [idText, setIdText] = useState("");
-  const [slippage, setSlippage] = useState(100);
+  const [slippage, setSlippage] = useState(300);
+  const [recenter, setRecenter] = useState(true);
 
   useEffect(() => {
     if (idText === "" && myPositions?.length) setIdText(myPositions[0].toString());
@@ -280,7 +386,7 @@ function RangeGuardForm() {
     }
     steps.push({
       label: "Arm range guard",
-      request: { address: chain.executor, abi: parallaxExecutorAbi, functionName: "createRangeGuard", args: [positionId, slippage], chainId: chain.chainId },
+      request: { address: chain.executor, abi: parallaxExecutorAbi, functionName: "createRangeGuard", args: [positionId, slippage, recenter], chainId: chain.chainId },
     });
     await flow.run(steps);
   }
@@ -316,7 +422,18 @@ function RangeGuardForm() {
         </div>
       )}
 
-      <Field label="Max slippage on withdrawal">
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-bg p-3.5">
+        <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[rgb(var(--executed))]" checked={recenter} onChange={(e) => setRecenter(e.target.checked)} />
+        <span className="text-[13px] leading-snug">
+          <span className="font-medium text-ink">Re-centre automatically</span>
+          <span className="block text-xs text-muted">
+            When the price leaves your range, re-open the same-width position around the new price and keep guarding it.
+            Off = just withdraw everything to you.
+          </span>
+        </span>
+      </label>
+
+      <Field label="Max slippage">
         <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
           {SLIPPAGE.map((s) => (
             <button key={s} type="button" onClick={() => setSlippage(s)} className={cx("num rounded-lg text-xs transition", slippage === s ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}>
@@ -332,8 +449,10 @@ function RangeGuardForm() {
         ) : pos ? (
           <>
             Watch position <b className="num text-ink">#{idText}</b>. The moment the price leaves{" "}
-            <b className="num text-ink">${fmtUsd(pLo!)}–${fmtUsd(pHi!)}</b>, withdraw all liquidity and fees back to you and return
-            the NFT.
+            <b className="num text-ink">${fmtUsd(pLo!)}–${fmtUsd(pHi!)}</b>,{" "}
+            {recenter
+              ? "re-open the liquidity as a same-width position centred on the new price, and keep guarding it. You can cancel any time to get the position back."
+              : "withdraw all liquidity and fees back to you and return the NFT."}
           </>
         ) : (
           <>

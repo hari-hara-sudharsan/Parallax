@@ -59,6 +59,19 @@ export const parallaxExecutorAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_TRAIL_TICKS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int24",
+        "internalType": "int24"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MIN_SLIPPAGE_BPS",
     "inputs": [],
     "outputs": [
@@ -66,6 +79,19 @@ export const parallaxExecutorAbi = [
         "name": "",
         "type": "uint16",
         "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_TRAIL_TICKS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int24",
+        "internalType": "int24"
       }
     ],
     "stateMutability": "view"
@@ -174,6 +200,11 @@ export const parallaxExecutorAbi = [
         "name": "maxSlippageBps",
         "type": "uint16",
         "internalType": "uint16"
+      },
+      {
+        "name": "recenter",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [
@@ -238,6 +269,77 @@ export const parallaxExecutorAbi = [
       },
       {
         "name": "upperTick",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxSlippageBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createTrailingStop",
+    "inputs": [
+      {
+        "name": "key",
+        "type": "tuple",
+        "internalType": "struct PoolKey",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "contract IHooks"
+          }
+        ]
+      },
+      {
+        "name": "zeroForOne",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "stopBelow",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "trailTicks",
         "type": "int24",
         "internalType": "int24"
       },
@@ -390,6 +492,16 @@ export const parallaxExecutorAbi = [
             "internalType": "uint64"
           },
           {
+            "name": "trailTicks",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "recenter",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
             "name": "poolId",
             "type": "bytes32",
             "internalType": "bytes32"
@@ -531,6 +643,110 @@ export const parallaxExecutorAbi = [
   },
   {
     "type": "function",
+    "name": "raiseTrail",
+    "inputs": [
+      {
+        "name": "reactiveSender",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "int24",
+        "internalType": "int24"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "recenterSelf",
+    "inputs": [
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "key",
+        "type": "tuple",
+        "internalType": "struct PoolKey",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "contract IHooks"
+          }
+        ]
+      },
+      {
+        "name": "tick",
+        "type": "int24",
+        "internalType": "int24"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "newRuleId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "newPositionId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "tl",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "tu",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "refund0",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "refund1",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "rules",
     "inputs": [
       {
@@ -584,6 +800,16 @@ export const parallaxExecutorAbi = [
         "name": "createdAt",
         "type": "uint64",
         "internalType": "uint64"
+      },
+      {
+        "name": "trailTicks",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "recenter",
+        "type": "bool",
+        "internalType": "bool"
       },
       {
         "name": "poolId",
@@ -693,6 +919,12 @@ export const parallaxExecutorAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "trailTicks",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
       }
     ],
     "anonymous": false
@@ -754,6 +986,43 @@ export const parallaxExecutorAbi = [
   },
   {
     "type": "event",
+    "name": "RuleRecentered",
+    "inputs": [
+      {
+        "name": "oldRuleId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newRuleId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newPositionId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "tickLower",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
+      },
+      {
+        "name": "tickUpper",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "RuleSkipped",
     "inputs": [
       {
@@ -779,6 +1048,31 @@ export const parallaxExecutorAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RuleUpdated",
+    "inputs": [
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "lowerTick",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
+      },
+      {
+        "name": "upperTick",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
       }
     ],
     "anonymous": false
@@ -849,6 +1143,17 @@ export const parallaxExecutorAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidTrail",
+    "inputs": [
+      {
+        "name": "trailTicks",
+        "type": "int24",
+        "internalType": "int24"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "NativeCurrencyNotSupported",
     "inputs": []
   },
@@ -894,6 +1199,11 @@ export const parallaxExecutorAbi = [
         "internalType": "uint256"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "NotSelf",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1068,6 +1378,19 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "function",
+    "name": "RAISE_GAS_LIMIT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "RULE_CANCELLED_TOPIC0",
     "inputs": [],
     "outputs": [
@@ -1120,6 +1443,19 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "function",
+    "name": "RULE_UPDATED_TOPIC0",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "SWAP_TOPIC0",
     "inputs": [],
     "outputs": [
@@ -1127,6 +1463,19 @@ export const parallaxReactiveAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TRAIL_STEP_TICKS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int24",
+        "internalType": "int24"
       }
     ],
     "stateMutability": "view"
@@ -1280,6 +1629,16 @@ export const parallaxReactiveAbi = [
             "name": "index",
             "type": "uint32",
             "internalType": "uint32"
+          },
+          {
+            "name": "trailTicks",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "raiseSince",
+            "type": "uint64",
+            "internalType": "uint64"
           }
         ]
       }
@@ -1512,6 +1871,37 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "event",
+    "name": "MirrorUpdated",
+    "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "lowerTick",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
+      },
+      {
+        "name": "upperTick",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "PoolUnwatched",
     "inputs": [
       {
@@ -1662,6 +2052,31 @@ export const parallaxReactiveAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TrailRaiseRequested",
+    "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "tick",
+        "type": "int24",
+        "indexed": false,
+        "internalType": "int24"
       }
     ],
     "anonymous": false

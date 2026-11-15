@@ -9,7 +9,7 @@ import { REACTIVE, type ChainDeployment } from "@/lib/deployment";
 export type RuleView = {
   id: bigint;
   owner: Address;
-  ruleType: number; // 0 STOP_LOSS, 1 TAKE_PROFIT, 2 RANGE_GUARD
+  ruleType: number; // 0 STOP_LOSS, 1 TAKE_PROFIT, 2 RANGE_GUARD, 3 TRAILING_STOP
   status: number; //   1 ACTIVE, 2 EXECUTED, 3 CANCELLED
   zeroForOne: boolean;
   lowerTick: number;
@@ -18,6 +18,8 @@ export type RuleView = {
   amountIn: bigint;
   createdAt: number;
   positionId: bigint;
+  trailTicks: number;
+  recenter: boolean;
   /** Reactive has fired and a callback is in flight (read from the Lasna mirror). */
   triggered: boolean;
 };
@@ -74,6 +76,8 @@ export function useRules(owner: Address | undefined, chain: ChainDeployment) {
             amountIn: r.amountIn,
             createdAt: Number(r.createdAt),
             positionId: r.positionId,
+            trailTicks: r.trailTicks,
+            recenter: r.recenter,
             triggered,
           } satisfies RuleView;
         }),
