@@ -1,0 +1,6 @@
+# Normalize text files to LF in the repo.
+* text=auto
+# Shell scripts and Makefiles must stay LF even on Windows checkouts, or bash/make break.
+*.sh   text eol=lf
+Makefile text eol=lf
+*.sol  text eol=lf
