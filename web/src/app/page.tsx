@@ -2,16 +2,17 @@
 
 import { CreateRule } from "@/components/CreateRule";
 import { DemoPanel } from "@/components/DemoPanel";
-import { AnswerStrip, LoopStrip } from "@/components/GuardsOverview";
+import { LoopStrip } from "@/components/GuardsOverview";
 import { LiveFeed } from "@/components/LiveFeed";
 import { MyRules } from "@/components/MyRules";
+import { useAccount } from "wagmi";
 import { ProofView } from "@/components/ProofView";
 import { Shell, TitleRow, useView } from "@/components/Shell";
 import { VaultPanel } from "@/components/VaultPanel";
 
 /*
- * Grid (desktop, 1440): rail 55 + 32 gutter, canvas up to 1312. One gap (24px) everywhere.
- * Guards: 12 columns. Row 2: loop 8 + demo 4. Row 3: arm a rule 5 + feed/rules 7. 8+4 = 5+7 = 12.
+ * Grid (desktop, 1440): rail 55 + 48 gutter, canvas up to 1200. One gap (32px) everywhere.
+ * Guards: 12 columns. Row 1: price + how fast (5) beside protect (7). Row 2: activity (7) + my rules (5).
  */
 export default function Home() {
   const [view, setView] = useView();
@@ -21,35 +22,21 @@ export default function Home() {
       {view === "guards" && (
         <div key="guards" className="m-view">
           <TitleRow
+            chainSwitch={false}
             title="Guards"
-            sub="Stop-losses, take-profits, trailing stops and LP range guards on Uniswap v4. One reactive contract on Lasna watches every swap and executes on the chain it happened, with no bot and no server."
+            sub="Set your line once. Parallax sells the moment the price crosses it, in about a second, with no bot and no server."
           />
-          <div className="grid gap-6">
-            <div className="m-rise" style={{ "--i": 0 } as React.CSSProperties}>
-              <AnswerStrip />
+          <div className="grid gap-8 lg:grid-cols-12">
+            <div className="grid content-start gap-8 lg:col-span-5">
+              <DemoPanel />
+              <LiveFeed />
             </div>
-            <div className="grid gap-6 lg:grid-cols-12">
-              <div className="m-rise flex lg:col-span-8 [&>section]:flex-1" style={{ "--i": 1 } as React.CSSProperties}>
-                <LoopStrip />
-              </div>
-              <div className="m-rise flex lg:col-span-4 [&>section]:flex-1" style={{ "--i": 2 } as React.CSSProperties}>
-                <DemoPanel />
-              </div>
-            </div>
-            <div className="grid items-start gap-6 lg:grid-cols-12">
-              <div className="m-rise lg:col-span-5" style={{ "--i": 3 } as React.CSSProperties}>
-                <CreateRule />
-              </div>
-              <div className="grid gap-6 lg:col-span-7">
-                <div className="m-rise" style={{ "--i": 4 } as React.CSSProperties}>
-                  <LiveFeed />
-                </div>
-                <div className="m-rise" style={{ "--i": 5 } as React.CSSProperties}>
-                  <MyRules />
-                </div>
-              </div>
+            <div className="grid content-start gap-8 lg:col-span-7">
+              <CreateRule />
+              <LoopStrip />
             </div>
           </div>
+          <YourRules />
         </div>
       )}
 
@@ -82,5 +69,16 @@ export default function Home() {
         </a>
       </footer>
     </Shell>
+  );
+}
+
+/** Your rules appear once a wallet is connected; before that there is nothing of yours to show. */
+function YourRules() {
+  const { address } = useAccount();
+  if (!address) return null;
+  return (
+    <div className="mt-8">
+      <MyRules />
+    </div>
   );
 }

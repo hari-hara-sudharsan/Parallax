@@ -9,7 +9,7 @@ import { useVaultHistory, useVaultState, type VaultEvent } from "@/hooks/useVaul
 import { mockErc20Abi, parallaxVaultAbi } from "@/lib/abis";
 import { CHAINS, LINKS, USDC_DECIMALS, VAULT, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
 import { fmtToken, tickToPrice } from "@/lib/price";
-import { AnimatedNumber, Button, Chip, Field, Panel, Stat, TxLink, cx, inputClass } from "./ui";
+import { AnimatedNumber, Button, Chip, Disclosure, Field, Panel, Stat, TxLink, cx, inputClass } from "./ui";
 
 const chain = CHAINS[VAULT.chain];
 const usd = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -97,29 +97,37 @@ export function VaultPanel() {
   const reacted = (history ?? []).filter((e) => e.reason && e.reason !== "deposit");
 
   return (
-    <div className="grid gap-6">
-      <section aria-label="Vault figures" style={{ "--i": 0 } as React.CSSProperties} className="m-rise rounded-[6px] bg-panel shadow-[0_12px_28px_rgba(0,0,0,.2)]">
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[6px] bg-line lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
-          <div className="col-span-2 bg-panel px-6 py-5 lg:col-span-1">
-            <Stat lead label="Vault value" value={<AnimatedNumber value={tvl} format={(n) => `$${usd(n)}`} />} sub="position plus idle tokens, at the live pool price" />
+    <div className="grid gap-8">
+      <section aria-label="Vault figures" style={{ "--i": 0 } as React.CSSProperties} className="m-rise rounded-[20px] bg-panel">
+        <div className="grid gap-px overflow-hidden rounded-[20px] bg-line md:grid-cols-[1.3fr_1fr_1.2fr]">
+          <div className="bg-panel px-7 py-6">
+            <Stat lead label="Vault value" value={<AnimatedNumber value={tvl} format={(n) => `$${usd(n)}`} />} />
           </div>
-          <div className="col-span-2 bg-panel px-6 py-5 sm:col-span-1">
-            <div className="text-[12px] text-muted">State</div>
-            <div key={s?.mode + String(s?.inRange)} className="m-fade mt-2">{status ?? <span className="num text-faint">—</span>}</div>
+          <div className="bg-panel px-7 py-6">
+            <div className="text-[13px] text-muted">Right now</div>
+            <div key={s?.mode + String(s?.inRange)} className="m-fade mt-3">{status ?? <span className="text-faint">—</span>}</div>
           </div>
-          <div className="bg-panel px-6 py-5 max-sm:col-span-2">
-            <Stat label="Re-centred" value={<AnimatedNumber value={s?.rebalances} format={(n) => String(Math.round(n))} />} sub="the price drifted out" />
-          </div>
-          <div className="bg-panel px-6 py-5">
-            <Stat label="Evacuated" value={<AnimatedNumber value={s?.evacuations} format={(n) => String(Math.round(n))} />} sub={`a ≥ ${VAULT.breakerTicks / 100}% move in ${VAULT.windowSeconds} s`} />
-          </div>
-          <div className="bg-panel px-6 py-5">
-            <Stat label="Re-entered" value={<AnimatedNumber value={s?.reentries} format={(n) => String(Math.round(n))} />} sub={`after ${VAULT.calmSeconds} s of calm`} />
+          <div className="bg-panel px-7 py-6">
+            <div className="text-[13px] text-muted">What it has done on its own</div>
+            <div className="mt-2 flex gap-6">
+              {[
+                ["re-centred", s?.rebalances],
+                ["evacuated", s?.evacuations],
+                ["re-entered", s?.reentries],
+              ].map(([k, v]) => (
+                <div key={k as string}>
+                  <div className="num text-[24px] font-semibold leading-8">
+                    <AnimatedNumber value={v as number | undefined} format={(n) => String(Math.round(n))} />
+                  </div>
+                  <div className="text-[13px] text-faint">{k}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-12">
+      <div className="grid gap-8 lg:grid-cols-12">
         <Panel
           i={1}
           className="lg:col-span-7"
@@ -154,7 +162,7 @@ export function VaultPanel() {
                 : "No liquidity deployed yet. The first deposit opens the position."}
             </p>
           )}
-          <dl className="mt-5 grid gap-px overflow-hidden rounded-[6px] bg-line text-[13px] sm:grid-cols-3">
+          <dl className="mt-5 grid gap-px overflow-hidden rounded-[14px] bg-line text-[13px] sm:grid-cols-3">
             {[
               ["Range", `±${VAULT.halfWidthTicks / 100}% around the price`, "re-centred when the price leaves it"],
               ["Crash breaker", `≥ ${VAULT.breakerTicks / 100}% in ${VAULT.windowSeconds} s`, "pulls all liquidity out"],
@@ -183,7 +191,7 @@ export function VaultPanel() {
               <input className={inputClass} inputMode="decimal" value={usdcIn} onChange={(e) => setUsdcIn(e.target.value)} />
             </Field>
           </div>
-          <div className="mt-4 rounded-[6px] bg-raised px-4 py-3 text-[13px]">
+          <div className="mt-4 rounded-[14px] bg-raised px-4 py-3 text-[13px]">
             {previewUsd > 0 && price ? (
               <>
                 You deposit <span className="num text-ink">≈ ${usd(previewUsd)}</span> at the live price and own{" "}
@@ -226,43 +234,52 @@ export function VaultPanel() {
         </Panel>
       </div>
 
-      <Panel i={3} title="What the vault did, on-chain" aside={<span className="num text-[12px] text-faint">{reacted.length} reactive actions</span>}>
-        <ul className="-mx-6">
-          {(history ?? []).slice(0, 8).map((e, i) => (
-            <li key={`${e.tx}-${e.kind}`} style={{ "--i": i } as React.CSSProperties} className="m-row transition-colors duration-200 hover:bg-raised/40 grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-t border-rule px-6 py-3 first:border-t-0">
-              <span className={cx("text-[13px]", e.reason === "evacuate" ? "text-danger" : e.kind === "skipped" ? "text-muted" : "text-ink")}>{eventLabel(e)}</span>
-              <span className="num row-span-2 text-right text-[13px] text-ink">
-                {e.latencyBlocks !== undefined ? (
-                  <>
-                    {e.latencyBlocks} blocks
-                    <span className="block text-[12px] text-faint">≈ {((e.latencyBlocks * chain.blockMs) / 1000).toFixed(1)} s after the swap</span>
-                  </>
-                ) : (
-                  <span className="text-faint">—</span>
-                )}
-              </span>
-              <span className="flex flex-wrap gap-x-4 text-[13px] text-faint">
-                {e.originTx && (
-                  <span>
-                    ① <TxLink href={chain.explorerTx(e.originTx)} hash={e.originTx} />
+      <Panel i={3} title="History" aside={<span className="num text-[13px] text-faint">{reacted.length} automatic actions</span>}>
+        <ul className="-mx-7">
+          {(history ?? []).slice(0, 6).map((e, i) => (
+            <Disclosure
+              key={`${e.tx}-${e.kind}`}
+              i={i}
+              summary={
+                <span className="flex items-center gap-3">
+                  <span className={cx("min-w-0 flex-1 truncate text-[15px]", e.reason === "evacuate" ? "text-danger" : e.kind === "skipped" ? "text-muted" : "text-ink")}>
+                    {eventLabel(e)}
                   </span>
+                  <span className="num text-[17px] font-semibold text-ink">
+                    {e.latencyBlocks !== undefined ? `${((e.latencyBlocks * chain.blockMs) / 1000).toFixed(1)} s` : ""}
+                  </span>
+                </span>
+              }
+            >
+              <dl className="grid gap-3 rounded-[14px] bg-raised/60 p-4 text-[14px] sm:grid-cols-3">
+                {e.originTx && (
+                  <div>
+                    <dt className="text-faint">Swap</dt>
+                    <dd className="mt-0.5"><TxLink href={chain.explorerTx(e.originTx)} hash={e.originTx} /></dd>
+                  </div>
                 )}
                 {e.reactiveTx && (
-                  <span>
-                    ② <TxLink href={LINKS.lasnaTx(e.reactiveTx)} hash={e.reactiveTx} />
-                  </span>
+                  <div>
+                    <dt className="text-faint">Reactive, on Lasna</dt>
+                    <dd className="mt-0.5"><TxLink href={LINKS.lasnaTx(e.reactiveTx)} hash={e.reactiveTx} /></dd>
+                  </div>
                 )}
-                <span>
-                  {e.reason && e.reason !== "deposit" ? "③ " : ""}
-                  <TxLink href={chain.explorerTx(e.tx)} hash={e.tx} />
-                </span>
-              </span>
-            </li>
+                <div>
+                  <dt className="text-faint">{e.reason && e.reason !== "deposit" ? "Vault action" : "Transaction"}</dt>
+                  <dd className="mt-0.5"><TxLink href={chain.explorerTx(e.tx)} hash={e.tx} /></dd>
+                </div>
+                {e.latencyBlocks !== undefined && (
+                  <div className="sm:col-span-3 text-muted">
+                    <span className="num">{e.latencyBlocks}</span> blocks after the swap that caused it
+                  </div>
+                )}
+              </dl>
+            </Disclosure>
           ))}
-          {!history && <li className="px-6 text-[13px] text-muted">Reading the vault’s history…</li>}
-          {history && !history.length && <li className="px-6 text-[13px] text-muted">No activity yet.</li>}
+          {!history && <li className="px-7 text-[15px] text-muted">Reading the vault’s history…</li>}
+          {history && !history.length && <li className="px-7 text-[15px] text-muted">No activity yet.</li>}
         </ul>
-        <p className="mt-4 text-[12px] leading-relaxed text-faint">
+        <p className="mt-6 text-[13px] leading-relaxed text-faint">
           Honest limits: stepping out of a crash avoids being sold into it, but if the price snaps straight back the vault goes back in lower and can end
           slightly behind a passive LP. Testnet tokens only. Every action re-checks the pool on-chain before it moves money.{" "}
           <a className="underline decoration-control underline-offset-4 hover:text-muted" href={chain.explorerAddress(VAULT.address)} target="_blank" rel="noreferrer">

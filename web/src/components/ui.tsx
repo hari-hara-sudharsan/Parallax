@@ -3,9 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 /**
- * Shared primitives ("data terminal" style). Cards are a lightness step darker than the ground, with no
- * border; a selection is always the same 1px accent line, exactly as wide as its label; numbers are
- * JetBrains Mono with tabular digits (the style's chosen face: on-chain figures must stack; taste-skill-ignore); controls are full pills.
+ * Shared primitives. A calm, Apple-like dark system: soft 20px cards one lightness step above true black,
+ * generous padding, large type, pill controls, and detail kept behind a tap. Hashes alone are monospace.
  */
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -31,16 +30,16 @@ export function Panel({
   return (
     <section
       id={id}
-      className={cx("rounded-[6px] bg-panel shadow-[0_12px_28px_rgba(0,0,0,.2)]", i !== undefined && "m-rise", className)}
+      className={cx("rounded-[20px] bg-panel", i !== undefined && "m-rise", className)}
       style={i !== undefined ? ({ "--i": i } as React.CSSProperties) : undefined}
     >
       {(title || aside) && (
-        <header className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-6 pt-5">
-          <h2 className="text-[16px] font-semibold leading-6 text-ink">{title}</h2>
+        <header className="flex min-h-[56px] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-7 pt-6">
+          <h2 className="text-[19px] font-semibold leading-7 tracking-[-0.02em] text-ink">{title}</h2>
           {aside}
         </header>
       )}
-      <div className="px-6 pb-6 pt-4">{children}</div>
+      <div className="px-7 pb-7 pt-4">{children}</div>
     </section>
   );
 }
@@ -64,7 +63,7 @@ const dotClass: Record<Tone, string> = {
 /** Status pill: a pale tint with text of the same hue (never a saturated fill). */
 export function Chip({ tone, children, pulse }: { tone: Tone; children: ReactNode; pulse?: boolean }) {
   return (
-    <span className={cx("inline-flex h-5 flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[12px] font-medium", toneClass[tone])}>
+    <span className={cx("inline-flex h-6 flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium", toneClass[tone])}>
       <span className={cx("h-1.5 w-1.5 rounded-full", dotClass[tone], pulse && "opacity-80")} />
       {children}
     </span>
@@ -77,9 +76,11 @@ export function Button({
   busy,
   progress,
   children,
+  size = "md",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "ghost" | "danger";
+  size?: "md" | "lg";
   /** A transaction is pending: a light sweeps across the button. */
   busy?: boolean;
   /** Multi-step flows: 0–1, drawn as a bar along the button's foot. */
@@ -89,12 +90,13 @@ export function Button({
     <button
       {...props}
       className={cx(
-        "m-lift relative inline-flex h-[34px] flex-none items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-full px-4 text-[13px] font-medium",
+        "m-lift relative inline-flex flex-none items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-full font-medium",
+        size === "lg" ? "h-[52px] px-7 text-[17px]" : "h-9 px-4 text-[14px]",
         "disabled:cursor-not-allowed disabled:opacity-50",
         // Primary by inversion: a white pill with black text.
         variant === "primary" && "bg-ink text-bg hover:bg-ink/85",
-        variant === "ghost" && "text-ink ring-1 ring-inset ring-control hover:ring-muted",
-        variant === "danger" && "text-danger ring-1 ring-inset ring-danger/50 hover:ring-danger",
+        variant === "ghost" && "bg-raised text-ink hover:bg-[#2f2f33]",
+        variant === "danger" && "bg-danger/15 text-danger hover:bg-danger/25",
         busy && "disabled:opacity-80",
         className,
       )}
@@ -115,8 +117,8 @@ export function Button({
 }
 
 /**
- * The style's one move: options as plain labels; the selected one gets a 1px accent line exactly as wide
- * as its label, on the control's bottom edge. Keyboard: arrow keys move the selection.
+ * Segmented control, iOS style: a pill track; the selected option sits on a lighter thumb that slides
+ * between options. Keyboard: arrow keys move the selection.
  */
 export function Segmented<T extends string | number>({
   options,
@@ -134,12 +136,12 @@ export function Segmented<T extends string | number>({
   className?: string;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [bar, setBar] = useState<{ x: number; w: number } | null>(null);
+  const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
   const index = options.indexOf(value);
   useLayoutEffect(() => {
     const measure = () => {
       const el = refs.current[index];
-      if (el) setBar({ x: el.offsetLeft, w: el.offsetWidth });
+      if (el) setThumb({ x: el.offsetLeft, w: el.offsetWidth });
     };
     measure();
     window.addEventListener("resize", measure);
@@ -150,12 +152,17 @@ export function Segmented<T extends string | number>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cx("relative flex h-[34px] items-stretch gap-5 border-b border-line", className)}
+      className={cx("relative inline-flex h-9 max-w-full items-stretch overflow-x-auto rounded-full bg-raised p-[3px]", className)}
       onKeyDown={(e) => {
         if (e.key === "ArrowRight") onChange(options[(index + 1) % options.length]);
         if (e.key === "ArrowLeft") onChange(options[(index - 1 + options.length) % options.length]);
       }}
     >
+      <span
+        aria-hidden
+        className="m-slide absolute bottom-[3px] left-0 top-[3px] rounded-full bg-[#4a4a4f] shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+        style={thumb ? { transform: `translateX(${thumb.x}px)`, width: thumb.w } : { opacity: 0 }}
+      />
       {options.map((o, i) => {
         const on = o === value;
         return (
@@ -169,19 +176,75 @@ export function Segmented<T extends string | number>({
             aria-checked={on}
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(o)}
-            className={cx("relative -mb-px whitespace-nowrap text-[13px] transition-colors duration-200", on ? "text-ink" : "text-muted hover:text-ink")}
+            className={cx(
+              "relative z-10 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors duration-200",
+              on ? "text-ink" : "text-muted hover:text-ink",
+            )}
           >
             {render ? render(o) : String(o)}
           </button>
         );
       })}
-      {/* The style's one selection mark: a 1px accent line exactly as wide as the label, sliding between options. */}
-      <span
-        aria-hidden
-        className="m-slide absolute bottom-[-1px] left-0 h-px bg-active"
-        style={bar ? { transform: `translateX(${bar.x}px)`, width: bar.w } : { opacity: 0 }}
-      />
     </div>
+  );
+}
+
+/** A large slider with a filled track (the fill follows the thumb). */
+export function Slider({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  label,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  label: string;
+}) {
+  const fill = `${((value - min) / (max - min)) * 100}%`;
+  return (
+    <input
+      type="range"
+      aria-label={label}
+      className="px-range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      style={{ "--fill": fill } as React.CSSProperties}
+    />
+  );
+}
+
+/** A row that opens to show its detail (the transactions behind an execution, say). */
+export function Disclosure({ summary, children, i }: { summary: ReactNode; children: ReactNode; i?: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="m-row border-t border-rule first:border-t-0" style={i !== undefined ? ({ "--i": i } as React.CSSProperties) : undefined}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-4 px-7 py-4 text-left transition-colors duration-200 hover:bg-raised/50"
+      >
+        <span className="min-w-0 flex-1">{summary}</span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          aria-hidden
+          className={cx("flex-none text-faint transition-transform duration-300", open && "rotate-90")}
+        >
+          <path d="M5 3l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && <div className="m-open px-7 pb-5">{children}</div>}
+    </li>
   );
 }
 
@@ -263,13 +326,13 @@ export function useCountUp(target: number, ms = 900) {
 }
 
 export function TxLink({ href, hash, label }: { href: string; hash?: string; label?: string }) {
-  if (!hash) return <span className="num text-faint">—</span>;
+  if (!hash) return <span className="text-faint">—</span>;
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="num whitespace-nowrap text-ink underline decoration-control underline-offset-4 transition hover:decoration-ink"
+      className="mono whitespace-nowrap text-ink underline decoration-control underline-offset-4 transition hover:decoration-ink"
       title={hash}
     >
       {label ?? `${hash.slice(0, 6)}…${hash.slice(-4)}`}
@@ -280,7 +343,7 @@ export function TxLink({ href, hash, label }: { href: string; hash?: string; lab
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 flex items-baseline justify-between gap-3 text-[12px] text-muted">
+      <span className="mb-2 flex items-baseline justify-between gap-3 text-[13px] text-muted">
         {label}
         {hint && <span className="text-faint">{hint}</span>}
       </span>
@@ -293,13 +356,13 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 export function Stat({ label, value, sub, lead }: { label: string; value: ReactNode; sub?: ReactNode; lead?: boolean }) {
   return (
     <div className="min-w-0">
-      <div className="text-[12px] text-muted">{label}</div>
-      <div className={cx("num mt-1 truncate text-ink", lead ? "text-[32px] leading-10" : "text-[20px] leading-7")}>{value}</div>
-      {sub && <div className="mt-0.5 truncate text-[12px] text-faint">{sub}</div>}
+      <div className="text-[13px] text-muted">{label}</div>
+      <div className={cx("num mt-1 truncate font-semibold tracking-[-0.02em] text-ink", lead ? "text-[40px] leading-[48px]" : "text-[24px] leading-8")}>{value}</div>
+      {sub && <div className="mt-1 truncate text-[13px] text-faint">{sub}</div>}
     </div>
   );
 }
 
 export const inputClass =
-  "num h-10 w-full rounded-[6px] bg-raised px-3.5 text-[14px] text-ink ring-1 ring-inset ring-control placeholder:text-faint " +
+  "num h-12 w-full rounded-[14px] bg-raised px-4 text-[17px] text-ink ring-1 ring-inset ring-transparent placeholder:text-faint " +
   "transition focus:outline-none focus:ring-active";

@@ -56,35 +56,35 @@ export function ProofView() {
   const withReactive = rows.filter((r) => r.reactiveTx).length;
 
   return (
-    <div className="grid min-w-0 gap-6">
-      <section aria-label="Proof figures" style={{ "--i": 0 } as React.CSSProperties} className="m-rise rounded-[6px] bg-panel shadow-[0_12px_28px_rgba(0,0,0,.2)]">
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[6px] bg-line lg:grid-cols-4">
-          <div className="col-span-2 bg-panel px-6 py-5 lg:col-span-1">
+    <div className="grid min-w-0 gap-8">
+      <section aria-label="Proof figures" style={{ "--i": 0 } as React.CSSProperties} className="m-rise rounded-[20px] bg-panel">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[20px] bg-line lg:grid-cols-4">
+          <div className="col-span-2 bg-panel px-7 py-6 lg:col-span-1">
             <Stat lead label="Proven loops" value={<AnimatedNumber value={rows.length} format={(n) => Math.round(n).toLocaleString("en-US")} />} sub={`${withReactive} with all three transactions stored`} />
           </div>
-          <div className="bg-panel px-6 py-5">
+          <div className="bg-panel px-7 py-6">
             <Stat label="Base median" value={base.length ? `${median(base)} blocks` : "—"} sub={base.length ? `≈ ${((median(base)! * 200) / 1000).toFixed(1)} s · ${base.length} loops` : undefined} />
           </div>
-          <div className="bg-panel px-6 py-5">
+          <div className="bg-panel px-7 py-6">
             <Stat label="Unichain median" value={uni.length ? `${median(uni)} blocks` : "—"} sub={uni.length ? `≈ ${median(uni)} s · ${uni.length} loops` : undefined} />
           </div>
-          <div className="bg-panel px-6 py-5">
+          <div className="bg-panel px-7 py-6">
             <Stat label="Keeper bot, Base (same pool, same RPC)" value="10 blocks" sub="median of 20 runs · bench/keeper.mjs" />
           </div>
         </div>
       </section>
 
       <Panel i={1} className="min-w-0" title="Every loop, origin → reactive → callback" aside={<Segmented label="Show" options={FILTERS} value={filter} onChange={setFilter} />}>
-        <div className="-mx-6 overflow-x-auto">
-          <table className="w-full min-w-[880px] text-[13px] [&_td]:pr-6 [&_th]:pr-6">
+        <div className="-mx-7 overflow-x-auto">
+          <table className="w-full min-w-[900px] text-[14px] [&_td]:pr-6 [&_th]:pr-6">
             <thead>
-              <tr className="text-left text-[12px] text-muted">
-                <th className="h-10 px-6 font-normal">Loop</th>
+              <tr className="text-left text-[13px] text-muted">
+                <th className="h-11 px-7 font-normal">Loop</th>
                 <th className="h-10 font-normal">Chain</th>
                 <th className="h-10 font-normal">① Origin swap</th>
                 <th className="h-10 font-normal">② Reactive tx, Lasna</th>
                 <th className="h-10 font-normal">③ Callback</th>
-                <th className="h-10 px-6 text-right font-normal">Latency</th>
+                <th className="h-11 px-7 text-right font-normal">Latency</th>
               </tr>
             </thead>
             <tbody key={filter}>
@@ -92,7 +92,7 @@ export function ProofView() {
                 const c = CHAINS[r.chain];
                 return (
                   <tr key={r.key} style={{ "--i": Math.min(i, 14) } as React.CSSProperties} className="m-row border-t border-rule transition-colors duration-200 hover:bg-raised/60">
-                    <td className="h-[42px] px-6">
+                    <td className="h-[52px] px-7">
                       <span className="text-ink">{r.what}</span> <span className="text-faint">· {r.group}</span>
                     </td>
                     <td className="text-muted">{c.short}</td>
@@ -105,7 +105,7 @@ export function ProofView() {
                     <td>
                       <TxLink href={r.callbackTx ? c.explorerTx(r.callbackTx) : "#"} hash={r.callbackTx ?? undefined} />
                     </td>
-                    <td className="num px-6 text-right">
+                    <td className="num px-7 text-right">
                       {r.blocks} <span className="text-faint">blocks · {((r.blocks * c.blockMs) / 1000).toFixed(1)} s</span>
                     </td>
                   </tr>

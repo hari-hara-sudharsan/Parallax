@@ -12,7 +12,7 @@ import { chainClients } from "@/lib/clients";
 import { useChain } from "@/hooks/useChain";
 import { WETH_DECIMALS, WETH_IS_CURRENCY0, poolKeyOf, type ChainDeployment } from "@/lib/deployment";
 import { boundsForPrice, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
-import { Button, Field, Panel, Segmented, TxLink, cx, inputClass } from "./ui";
+import { Button, Field, Panel, Segmented, Slider, TxLink, cx, inputClass } from "./ui";
 
 type Tab = "stop" | "take" | "trail" | "range";
 const TABS: { id: Tab; label: string; blurb: string }[] = [
@@ -26,7 +26,7 @@ const SLIPPAGE = [50, 100, 300, 500];
 export function CreateRule() {
   const [tab, setTab] = useState<Tab>("stop");
   return (
-    <Panel title="Create a rule">
+    <Panel title="Protect a position" i={1}>
       <Segmented<Tab>
         label="Rule type"
         options={TABS.map((t) => t.id)}
@@ -35,8 +35,8 @@ export function CreateRule() {
         render={(id) => TABS.find((t) => t.id === id)!.label}
         className="overflow-x-auto"
       />
-      <p className="mt-3 text-[13px] text-muted">{TABS.find((t) => t.id === tab)!.blurb}</p>
-      <div className="mt-5">
+      <p className="mt-4 text-[15px] text-muted">{TABS.find((t) => t.id === tab)!.blurb}</p>
+      <div className="mt-6">
         <div key={tab} className="m-fade">
           {tab === "range" ? <RangeGuardForm /> : tab === "trail" ? <TrailingForm /> : <PriceRuleForm kind={tab} key={tab} />}
         </div>
@@ -60,6 +60,7 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
   const [trigger, setTrigger] = useState("");
   const [amount, setAmount] = useState("1");
   const [slippage, setSlippage] = useState(300);
+  const [editing, setEditing] = useState(false);
 
   // Default the trigger 3% away from the live price, once.
   useEffect(() => {
@@ -108,61 +109,105 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
     refetchAllowance();
   }
 
+  // The slider sets how far from the live price the line sits (0.5–15%).
+  const dist = movePct !== undefined ? Math.min(15, Math.max(0.5, Math.abs(movePct))) : 3;
+  const setDist = (d: number) => price && setTrigger((price * (isStop ? 1 - d / 100 : 1 + d / 100)).toFixed(2));
+  const AMOUNTS = ["0.25", "0.5", "1", "Max"] as const;
+  const amountKey = (AMOUNTS as readonly string[]).includes(amount) ? amount : weth !== undefined && a === Number(weth.toFixed(4)) ? "Max" : "";
+
   return (
-    <div className="space-y-4">
-      <Field label={isStop ? "Sell when price falls to" : "Sell when price rises to"} hint={price ? `now $${fmtUsd(price)}` : undefined}>
-        <div className="relative">
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint">$</span>
-          <input
-            className={cx(inputClass, "pl-7", wrongSide && "ring-danger")}
-            inputMode="decimal"
-            type="number"
-            value={trigger}
-            onChange={(e) => setTrigger(e.target.value)}
-          />
-          {movePct !== undefined && (
-            <span className={cx("num absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px]", movePct < 0 ? "text-danger" : "text-executed")}>
-              {movePct > 0 ? "+" : ""}
-              {movePct.toFixed(1)}%
-            </span>
+    <div>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <div className="text-[13px] text-muted">{isStop ? "Sell if the price falls to" : "Sell if the price rises to"}</div>
+          {editing ? (
+            <input
+              autoFocus
+              className={cx(inputClass, "mt-2 w-48 text-[28px] font-semibold", wrongSide && "ring-danger")}
+              inputMode="decimal"
+              type="number"
+              value={trigger}
+              onChange={(e) => setTrigger(e.target.value)}
+              onBlur={() => setEditing(false)}
+              aria-label="Trigger price"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="num m-lift mt-1 block text-[44px] font-semibold leading-[52px] tracking-[-0.03em] text-ink"
+              title="Type an exact price"
+            >
+              {t ? `$${fmtUsd(t)}` : "—"}
+            </button>
           )}
         </div>
-      </Field>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Amount" hint={weth !== undefined ? `bal ${fmtToken(weth, 3)}` : undefined}>
-          <div className="relative">
-            <input className={cx(inputClass, "pr-16", insufficient && "ring-danger")} inputMode="decimal" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] text-faint">mWETH</span>
-          </div>
-        </Field>
-        <Field label="Max slippage">
-          <Segmented<number> label="Max slippage" options={SLIPPAGE} value={slippage} onChange={setSlippage} render={(v) => <span className="num">{v / 100}%</span>} />
-        </Field>
+        {movePct !== undefined && (
+          <span className={cx("num mb-2 rounded-full px-3 py-1 text-[14px] font-medium", movePct < 0 ? "bg-danger/15 text-danger" : "bg-executed/15 text-executed")}>
+            {movePct > 0 ? "+" : ""}
+            {movePct.toFixed(1)}%
+          </span>
+        )}
       </div>
 
-      <Preview>
+      <div className="mt-5">
+        <Slider label="Distance from the live price" min={0.5} max={15} step={0.1} value={dist} onChange={setDist} />
+        <div className="num mt-1 flex justify-between text-[13px] text-faint">
+          <span>{price ? `now $${fmtUsd(price)}` : ""}</span>
+          <button type="button" className="text-muted hover:text-ink" onClick={() => setEditing(true)}>
+            Type an exact price
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-[13px] text-muted">
+          Amount <span className="num text-faint">{weth !== undefined ? `· you have ${fmtToken(weth, 3)} mWETH` : ""}</span>
+        </div>
+        <Segmented<string>
+          label="Amount"
+          options={AMOUNTS}
+          value={amountKey || "1"}
+          onChange={(v) => setAmount(v === "Max" ? (weth !== undefined ? weth.toFixed(4) : "0") : v)}
+          render={(v) => <span className="num">{v === "Max" ? "Max" : `${v}`}</span>}
+        />
+      </div>
+
+      <details className="group mt-5">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[13px] text-muted transition-colors hover:text-ink">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="transition-transform duration-300 group-open:rotate-90">
+            <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Advanced · max slippage {slippage / 100}%
+        </summary>
+        <div className="m-open mt-3">
+          <Segmented<number> label="Max slippage" options={SLIPPAGE} value={slippage} onChange={setSlippage} render={(v) => <span className="num">{v / 100}%</span>} />
+        </div>
+      </details>
+
+      <p className="mt-7 text-[17px] leading-7 text-ink">
         {wrongSide ? (
           <span className="text-danger">
             A {isStop ? "stop-loss" : "take-profit"} must be {isStop ? "below" : "above"} the current price.
           </span>
         ) : insufficient ? (
-          <span className="text-danger">Not enough mWETH. Grab some from the demo panel.</span>
+          <span className="text-danger">Not enough mWETH. Get test tokens first.</span>
         ) : (
           <>
-            Sell <b className="num text-ink">{amount || "0"} mWETH</b> for mUSDC if the price {isStop ? "falls to" : "rises to"}{" "}
-            <b className="num text-ink">${t ? fmtUsd(t) : "…"}</b> {isStop ? "or below" : "or above"}. Never accept more than{" "}
-            <b className="num text-ink">{slippage / 100}%</b> worse than the market at that moment.
+            Sell <span className="num font-semibold">{amount || "0"} mWETH</span> the moment the price {isStop ? "falls to" : "rises to"}{" "}
+            <span className="num font-semibold">${t ? fmtUsd(t) : "…"}</span>.
           </>
         )}
-      </Preview>
+      </p>
 
-      <SubmitRow
-        disabled={!address || !valid || flow.busy}
-        label={!address ? "Connect a wallet" : isStop ? "Arm stop-loss" : "Arm take-profit"}
-        onClick={submit}
-        flow={flow}
-      />
+      <div className="mt-6">
+        <SubmitRow
+          disabled={!address || !valid || flow.busy}
+          label={!address ? "Connect a wallet" : isStop ? "Protect with a stop-loss" : "Set a take-profit"}
+          onClick={submit}
+          flow={flow}
+        />
+      </div>
     </div>
   );
 }
@@ -485,6 +530,7 @@ function SubmitRow({
   return (
     <div className="space-y-2">
       <Button
+        size="lg"
         className="w-full"
         disabled={disabled}
         onClick={onClick}

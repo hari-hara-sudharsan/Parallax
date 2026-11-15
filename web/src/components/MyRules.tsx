@@ -41,21 +41,21 @@ export function MyRules() {
   const active = rules?.filter((r) => r.status === 1).length ?? 0;
 
   return (
-    <Panel title="My rules" aside={rules?.length ? <span className="num text-[12px] text-faint">{active} active of {rules.length}</span> : null}>
+    <Panel i={4} title="Your rules" aside={rules?.length ? <span className="num text-[12px] text-faint">{active} active of {rules.length}</span> : null}>
       {!address ? (
         <Empty>Connect a wallet to see your rules.</Empty>
       ) : isLoading ? (
         <Empty>Loading…</Empty>
       ) : !rules?.length ? (
-        <Empty>No rules yet. Arm one in Create a rule.</Empty>
+        <Empty>No rules yet. Protect a position to add one.</Empty>
       ) : (
-        <ul className="-mx-6">
+        <ul className="-mx-7">
           {rules.map((r, i) => (
-            <li key={r.id.toString()} style={{ "--i": i } as React.CSSProperties} className="m-row transition-colors duration-200 hover:bg-raised/40 flex min-h-[56px] items-center gap-3 border-t border-rule px-6 py-2.5 first:border-t-0">
+            <li key={r.id.toString()} style={{ "--i": i } as React.CSSProperties} className="m-row transition-colors duration-200 hover:bg-raised/40 flex min-h-[64px] items-center gap-3 border-t border-rule px-7 py-3 first:border-t-0">
               <span className="num w-9 shrink-0 text-[12px] text-faint">#{r.id.toString()}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium">{TYPE_LABEL[r.ruleType]}</span>
+                  <span className="text-[15px] font-medium">{TYPE_LABEL[r.ruleType]}</span>
                   <StatusChip r={r} />
                 </div>
                 <p className="num mt-0.5 truncate text-[13px] text-muted">{describe(r)}</p>
@@ -98,5 +98,5 @@ export function MyRules() {
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-[13px] text-muted">{children}</p>;
+  return <p className="text-[15px] text-muted">{children}</p>;
 }

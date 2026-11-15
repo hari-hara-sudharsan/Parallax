@@ -36,11 +36,7 @@ export function ChainSwitch() {
       onChange={setChain}
       render={(k) => {
         const c = CHAIN_LIST.find((x) => x.key === k)!;
-        return (
-          <>
-            {c.name} <span className="num text-faint">{c.blockMs} ms</span>
-          </>
-        );
+        return <>{c.short}</>;
       }}
     />
   );

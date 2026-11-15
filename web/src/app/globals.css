@@ -3,43 +3,51 @@
 @tailwind utilities;
 
 /*
- * Tokens from the "data terminal" app style (dark, long sessions): cards darker than the ground,
- * elevation by lightness, colour only on data and status, and every selection a 1px accent line.
- * RGB triplets so Tailwind opacity modifiers work (bg-panel/60 etc.).
+ * Tokens: a calm, Apple-like dark system. True black ground, surfaces one lightness step up, generous
+ * radii, and the system colours used for meaning only (blue = selection and data, green = done,
+ * orange = in flight, red = loss). RGB triplets so Tailwind opacity modifiers work.
  */
 :root {
-  --bg: 23 23 25;        /* #171719 ground */
-  --panel: 19 18 23;     /* #131217 card, darker than the ground */
-  --raised: 33 32 35;    /* #212023 nested well */
-  --line: 34 34 36;      /* #222224 structural line */
-  --rule: 27 26 31;      /* #1b1a1f row rule */
-  --control: 58 58 62;   /* #3a3a3e control outline */
-  --ink: 255 255 255;
-  --muted: 138 140 146;  /* #8a8c92, 5.3:1 on the card */
-  --faint: 125 127 134;  /* #7d7f86, 4.6:1 on the card */
-  --active: 74 138 214;  /* #4a8ad6 the one accent: a 1px selection line, and rule levels on data */
-  --triggered: 217 164 65;  /* in flight */
-  --executed: 95 195 156;   /* done / positive */
-  --danger: 229 86 111;     /* negative */
+  --bg: 0 0 0;            /* #000000 ground */
+  --panel: 22 22 24;      /* #161618 card */
+  --raised: 38 38 41;     /* #262629 nested well, control fill */
+  --line: 38 38 41;       /* hairlines, used sparingly */
+  --rule: 30 30 33;       /* row separators */
+  --control: 72 72 76;    /* control outlines */
+  --ink: 245 245 247;     /* #F5F5F7 */
+  --muted: 161 161 166;   /* #A1A1A6, 7.9:1 on the card */
+  --faint: 134 134 139;   /* #86868B, 5.3:1 on the card */
+  --active: 41 151 255;   /* #2997FF */
+  --triggered: 255 159 10;
+  --executed: 48 209 88;
+  --danger: 255 69 58;
   color-scheme: dark;
 }
 
 body {
   background: rgb(var(--bg));
   color: rgb(var(--ink));
-  font-family: var(--font-sans), Inter, system-ui, sans-serif;
-  font-size: 13px;
-  line-height: 20px;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 22px;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Every figure, hash and block count in JetBrains Mono: on-chain numbers must stack digit for digit. */
+/* Figures: the text face with tabular digits, so they line up without looking like a terminal. */
 .num {
-  font-family: var(--font-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "cv11";
+}
+/* Hashes and addresses only. */
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.92em;
+  letter-spacing: 0;
 }
 
 :focus-visible {
-  outline: 1px solid rgb(var(--active));
+  outline: 2px solid rgb(var(--active) / 0.7);
   outline-offset: 2px;
 }
 
@@ -141,3 +149,57 @@ input[type="number"] {
 .m-lift { transition: transform 200ms var(--ease-out), background-color 200ms, color 200ms, box-shadow 200ms; }
 .m-lift:hover:not(:disabled) { transform: translateY(-1px); }
 .m-lift:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+/* The slider: a thick filled track and a large white thumb that grows under the finger. */
+.px-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+.px-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, rgb(var(--active)) var(--fill, 50%), rgb(var(--raised)) var(--fill, 50%));
+}
+.px-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--raised));
+}
+.px-range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--active));
+}
+.px-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -10px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  transition: transform 180ms var(--ease-out);
+}
+.px-range::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  transition: transform 180ms var(--ease-out);
+}
+.px-range:hover::-webkit-slider-thumb { transform: scale(1.08); }
+.px-range:active::-webkit-slider-thumb { transform: scale(1.18); }
+.px-range:active::-moz-range-thumb { transform: scale(1.18); }
+
+/* Disclosure: content that opens under its row. */
+@keyframes px-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.m-open { animation: px-open 280ms var(--ease-out) both; }

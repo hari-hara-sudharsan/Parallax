@@ -125,8 +125,8 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
         ))}
       </nav>
 
-      <main className="px-4 pb-24 pt-6 md:ml-[55px] md:px-8 md:pb-12 md:pt-8">
-        <div className="mx-auto max-w-[1312px]">{children}</div>
+      <main className="px-5 pb-28 pt-8 md:ml-[55px] md:px-12 md:pb-16 md:pt-12">
+        <div className="mx-auto max-w-[1200px]">{children}</div>
       </main>
     </div>
   );
@@ -135,10 +135,10 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
 /** The title row every view shares: the h1, one sentence about the data, and the real controls. */
 export function TitleRow({ title, sub, chainSwitch = true }: { title: string; sub: ReactNode; chainSwitch?: boolean }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
-        <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{title}</h1>
-        <p className="mt-1 max-w-[72ch] text-[14px] leading-5 text-muted">{sub}</p>
+        <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.03em] md:text-[32px] md:leading-10">{title}</h1>
+        <p className="mt-2 max-w-[60ch] text-[15px] leading-6 text-muted md:text-[17px] md:leading-7">{sub}</p>
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {chainSwitch && <ChainSwitch />}

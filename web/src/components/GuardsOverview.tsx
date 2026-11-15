@@ -86,17 +86,15 @@ export function LoopStrip() {
 
   return (
     <Panel
-      title="Latest loop"
+      i={2}
+      title="How fast it acted"
       aside={
         it ? (
           <span className="flex items-center gap-4">
-            <span className="num text-[12px] text-faint">
-              {CHAINS[it.chain].name} · rule #{it.ruleId.toString()}
-            </span>
             <button
               type="button"
               onClick={() => setReplay((r) => r + 1)}
-              className="m-lift rounded-full px-2.5 py-1 text-[12px] text-muted ring-1 ring-inset ring-control hover:text-ink hover:ring-muted"
+              className="m-lift rounded-full bg-raised px-3.5 py-1.5 text-[13px] font-medium text-muted hover:text-ink"
               aria-label="Replay the loop"
             >
               ↻ Replay
@@ -108,7 +106,7 @@ export function LoopStrip() {
       {!it ? (
         <p className="text-[13px] text-muted">No execution yet. Arm a rule below, then crash the price with Demo controls.</p>
       ) : (
-        <Strip key={`${it.key}:${replay}`} it={it} />
+        <Strip key={`${it.key}:${replay}`} it={it} median={data?.stats[it.chain]} />
       )}
     </Panel>
   );
@@ -139,10 +137,12 @@ function storedLatest(): FeedItem | undefined {
 /** The playback: 1.4 s for the whole axis, so a 10-block loop draws in about a second. */
 const AXIS_MS = 1400;
 
-function Strip({ it }: { it: FeedItem }) {
+function Strip({ it, median }: { it: FeedItem; median?: { n: number; p50Seconds?: number } }) {
   const c = CHAINS[it.chain];
   const n = it.latencyBlocks!;
-  const span = Math.max(n, KEEPER_P50_BLOCKS) + 2; // axis: block 0 … a little past the later of the two
+  // The keeper-bot median was measured on Base only (200 ms blocks); never compare it across chains.
+  const keeper = it.chain === "base" ? KEEPER_P50_BLOCKS : undefined;
+  const span = Math.max(n, keeper ?? 0, 4) + 2; // axis: block 0 … a little past the later of the two
   const x = (b: number) => `${(b / span) * 100}%`;
   const at = (b: number) => `${Math.round(200 + (b / span) * AXIS_MS)}ms`; // when the pen reaches block b
   const reactBlocks =
@@ -152,37 +152,39 @@ function Strip({ it }: { it: FeedItem }) {
 
   return (
     <div>
-      <p className="text-[14px] text-ink">
-        Executed <span className="num">{Math.round(counted)}</span> blocks after the swap that crossed the line,{" "}
-        <span className="num">≈ {((counted * c.blockMs) / 1000).toFixed(1)} s</span>
-        {n < KEEPER_P50_BLOCKS ? (
-          <span className="text-muted">
-            , <span className="num">{KEEPER_P50_BLOCKS - n}</span> blocks before the measured keeper-bot median.
-          </span>
-        ) : (
-          <span className="text-muted">; the measured keeper-bot median is {KEEPER_P50_BLOCKS} blocks.</span>
-        )}
-      </p>
-
-      <div className="relative mt-8 h-[84px]" role="img" aria-label={`Swap at block 0, callback at block ${n}`}>
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
+        <span className="num text-[56px] font-semibold leading-[60px] tracking-[-0.035em] text-ink">
+          {((counted * c.blockMs) / 1000).toFixed(1)}
+          <span className="ml-1 text-[28px] font-medium text-muted">s</span>
+        </span>
+        <span className="pb-2 text-[15px] text-muted">
+          from the swap to the stop executing on {c.short}, <span className="num">{Math.round(counted)}</span> blocks
+          {keeper !== undefined && n < keeper ? <>, ahead of a keeper bot</> : null}
+        </span>
+      </div>
+      <div className="relative mt-10 h-[84px]" role="img" aria-label={`Swap at block 0, callback at block ${n}`}>
         {/* the track, then the loop drawing itself along it */}
         <div className="absolute inset-x-0 top-[22px] h-[2px] bg-raised" />
         <div
           className="m-draw absolute left-0 top-[22px] h-[2px] bg-ink"
           style={{ width: x(n), "--dur": `${(n / span) * AXIS_MS}ms`, "--delay": "200ms" } as CSSProperties}
         />
-        {/* keeper-bot median: a quiet tick the loop has to beat */}
-        <div className="m-label absolute top-[14px] h-[18px] w-px bg-control" style={{ left: x(KEEPER_P50_BLOCKS), "--delay": "120ms" } as CSSProperties} />
-        <span
-          className="m-label absolute top-[62px] -translate-x-1/2 whitespace-nowrap text-[12px] text-muted"
-          style={{ left: x(KEEPER_P50_BLOCKS), "--delay": "160ms" } as CSSProperties}
-        >
-          keeper bot, median
-        </span>
+        {/* keeper-bot median (Base only): a quiet tick the loop has to beat */}
+        {keeper !== undefined && (
+          <>
+            <div className="m-label absolute top-[14px] h-[18px] w-px bg-control" style={{ left: x(keeper), "--delay": "120ms" } as CSSProperties} />
+            <span
+              className="m-label absolute top-[62px] -translate-x-1/2 whitespace-nowrap text-[12px] text-muted"
+              style={{ left: x(keeper), "--delay": "160ms" } as CSSProperties}
+            >
+              keeper bot
+            </span>
+          </>
+        )}
         {/* stations, each arriving when the pen reaches it */}
-        <Station at={x(0)} delay="120ms" label="① swap" align="start" />
-        {reactBlocks !== undefined && <Station at={x(reactBlocks)} delay={at(reactBlocks)} label="② Lasna" hollow />}
-        <Station at={x(n)} delay={at(n)} label="③ executed" strong />
+        <Station at={x(0)} delay="120ms" label="Swap" align="start" />
+        {reactBlocks !== undefined && <Station at={x(reactBlocks)} delay={at(reactBlocks)} label="Lasna" hollow />}
+        <Station at={x(n)} delay={at(n)} label="Executed" strong />
         {/* block ticks */}
         <div className="absolute inset-x-0 top-[44px]">
           {ticks.map((t) => (
@@ -197,11 +199,31 @@ function Strip({ it }: { it: FeedItem }) {
         </div>
       </div>
 
-      <dl className="mt-5 grid grid-cols-1 gap-y-2 text-[13px] sm:grid-cols-3">
-        <Row i={0} k="① Origin swap" v={<TxLink href={c.explorerTx(it.originTx)} hash={it.originTx} />} sub={it.originBlock ? `block ${it.originBlock.toLocaleString("en-US")}` : undefined} />
-        <Row i={1} k="② Reactive tx, Lasna" v={<TxLink href={it.reactiveTx ? LINKS.lasnaTx(it.reactiveTx) : "#"} hash={it.reactiveTx} />} />
-        <Row i={2} k="③ Callback" v={<TxLink href={it.callbackTx ? c.explorerTx(it.callbackTx) : "#"} hash={it.callbackTx} />} sub={it.executedBlock ? `block ${it.executedBlock.toLocaleString("en-US")}` : undefined} />
-      </dl>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-[13px] text-faint">
+        <span>
+          {median?.p50Seconds !== undefined ? (
+            <>
+              Median on {c.short} over <span className="num">{median.n}</span> on-chain loops:{" "}
+              <span className="num text-muted">{median.p50Seconds.toFixed(c.blockMs >= 1000 ? 0 : 1)} s</span>
+            </>
+          ) : null}
+        </span>
+        <span className="num">rule #{it.ruleId.toString()}</span>
+      </div>
+
+      <details className="group mt-5">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[14px] text-muted transition-colors hover:text-ink">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="transition-transform duration-300 group-open:rotate-90">
+            <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Show the three transactions
+        </summary>
+        <dl className="m-open mt-4 grid grid-cols-1 gap-y-3 text-[14px] sm:grid-cols-3">
+          <Row i={0} k="Swap" v={<TxLink href={c.explorerTx(it.originTx)} hash={it.originTx} />} sub={it.originBlock ? `block ${it.originBlock.toLocaleString("en-US")}` : undefined} />
+          <Row i={1} k="Reactive, on Lasna" v={<TxLink href={it.reactiveTx ? LINKS.lasnaTx(it.reactiveTx) : "#"} hash={it.reactiveTx} />} />
+          <Row i={2} k="Execution" v={<TxLink href={it.callbackTx ? c.explorerTx(it.callbackTx) : "#"} hash={it.callbackTx} />} sub={it.executedBlock ? `block ${it.executedBlock.toLocaleString("en-US")}` : undefined} />
+        </dl>
+      </details>
     </div>
   );
 }
@@ -223,7 +245,7 @@ function Station({ at, delay, label, strong, hollow, align }: { at: string; dela
         style={v}
       />
       <span
-        className={"m-label absolute top-[-6px] whitespace-nowrap text-[12px] text-muted " + (align === "start" ? "" : "-translate-x-1/2")}
+        className={"m-label absolute top-[-8px] whitespace-nowrap text-[13px] text-muted " + (align === "start" ? "" : "-translate-x-1/2")}
         style={v}
       >
         {label}
