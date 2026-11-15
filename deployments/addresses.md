@@ -90,9 +90,11 @@ Deployer: `0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3`. **v3** (Week 1) is multi
 layout changed, so both contracts were redeployed and linked with `setExecutor` ([`0x011d29eb…a191821a`](https://lasna.reactscan.net/tx/0x011d29eb8f7a17bc17fc74065d1196d7cd43f9c4aa75d5e882bb8620a191821a)). (ParallaxReactive and MockWETH share an address because each was the
 deployer's first contract (nonce 0) on its own chain.)
 
-## Parallax Vault (v1, deployed 2026-11-15)
+## Parallax Vault (deployed 2026-11-15)
 
 | Contract | Chain | Address | Notes |
 |---|---|---|---|
-| ParallaxVaultReactive (brain) | Lasna 5318007 | `0x5A9f48A2686245eB7418b5a15aF2D4A431251D02` | breaker 200 ticks / 60 s window / 60 s calm; old quiet-pool logic (see tx-proofs.md) |
-| ParallaxVault (pxLP) | Base Sepolia 84532 | `0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |
+| **ParallaxVaultReactive v2 (current)** | Lasna 5318007 | `0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24` | breaker 200 ticks / 60 s window / 60 s calm |
+| **ParallaxVault v2 (current)** | Base Sepolia 84532 | `0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |
+| ParallaxVaultReactive v1 | Lasna 5318007 | `0x5A9f48A2686245eB7418b5a15aF2D4A431251D02` | retired: quiet-pool bug (see tx-proofs.md) |
+| ParallaxVault v1 | Base Sepolia 84532 | `0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49` | retired |

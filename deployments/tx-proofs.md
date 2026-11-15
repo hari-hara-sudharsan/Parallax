@@ -128,8 +128,26 @@ evacuation. The pool had been quiet for over a minute, so the brain's 60-second 
 10% move looked like a slow drift; the vault re-centred into the falling price instead of stepping aside. The
 second crash came seconds after another swap and evacuated correctly. Fix: the brain now always compares against
 the last price it saw, however old (`_record` in `ParallaxVaultReactive.sol`, regression test
-`test_crashAfterQuietSpell_stillEvacuates`). The deployed brain still has the old logic until it is redeployed
-(~0.17 lREACT).
+`test_crashAfterQuietSpell_stillEvacuates`). Redeployed as vault v2 the same day (next section).
+
+---
+
+## Run: Parallax Vault v2 (fixed brain), live on Base Sepolia, 2026-11-15
+
+Redeployed with the quiet-pool fix and replayed the exact scenario that failed in v1: deposit, **90 seconds with
+no trades**, then a crash. Vault `0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F` (Base Sepolia), brain
+`0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24` (Lasna). Same tuning as v1.
+
+| Step | ① Origin swap (Base) | ② Reactive tx (Lasna) | ③ Vault callback (Base) | Latency |
+|---|---|---|---|---|
+| Deposit 1 mWETH + 2,150 mUSDC → position [199380, 199980) | [`0xe45cc6d9…4e9c21f1`](https://sepolia.basescan.org/tx/0xe45cc6d93e794faf9991ab0f5ff823dd96be886c1e5617b5c5469e1d4e9c21f1) (block 59098821) | brain mirrors the range | n/a | n/a |
+| **Evacuate** after a 90 s quiet spell: 20 mWETH sold, tick 199690 → 200570 | [`0x2ba135d5…8a10b1c5`](https://sepolia.basescan.org/tx/0x2ba135d5a647a167108b47b5f08b3155f266b45aee6d739198b896fe8a10b1c5) (block 59099485) | [`0x1361c5c3…e9181209`](https://lasna.reactscan.net/tx/0x1361c5c36c50ba1930ead26f1114aeb8ab1f631bec28d61d7b900f69e9181209) | [`0x60ed2a33…3721fac7`](https://sepolia.basescan.org/tx/0x60ed2a33a08606656df42595c169176685cfd2ab2c7d2211563c12543721fac7) (block 59099494): all liquidity pulled to idle, 222,641 gas. `rebalances` stayed 0 | **9 blocks ≈ 1.8 s** |
+| **Re-enter** after 60 s calm: tick 200604 → 200598 | [`0xf3757fcd…d428392e`](https://sepolia.basescan.org/tx/0xf3757fcd89ffac07a558b99685a001a8dc97d29c7db40133eb21f569d428392e) (block 59100169) | [`0x3971c50c…64e61bda`](https://lasna.reactscan.net/tx/0x3971c50c153c15a63ca512189a6b83606fb431a2635abc70866e5cd964e61bda) (`VaultActionRequested(REENTER, 200598, move 6, origin 0xf3757fcd…)`) | [`0xd8ef476a…ff9f0836`](https://sepolia.basescan.org/tx/0xd8ef476a4f0db4e2dd02de15f62535b1f80f405eea619c044e1ecf0aff9f0836) (block 59100177): new range [200280, 200880), 453,505 gas | **8 blocks ≈ 1.6 s** |
+
+The fix is visible on-chain: in v1 the quiet-spell crash produced a re-centre; in v2 the same scenario produced an
+evacuation. (The evacuation row's Lasna tx is the brain's only other action request in this run; its event also
+carries the origin hash. The Lasna RPC was unreachable from this network when the table was written, so that
+field was linked by order rather than decoded.)
 
 ---
 
