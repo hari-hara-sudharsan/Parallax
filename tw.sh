@@ -17,7 +17,9 @@ need_env() { for v in "$@"; do [[ -n "${!v:-}" ]] || { echo "✗ $v is not set. 
 # ── Chain config (official addresses: deployments/addresses.md, contracts/script/Chains.sol) ──
 SYSTEM_CONTRACT=${SYSTEM_CONTRACT:-0x8888888888888888888888888888888888888888}
 LASNA_ID=5318007
-case "${CHAIN:-unichain}" in
+# Foundry's cast also reads a CHAIN env var (as a *mainnet* chain name), so take ours and unset it.
+SEL="${CHAIN:-unichain}"; unset CHAIN
+case "$SEL" in
   unichain) CID=1301;  RPC="${UNICHAIN_SEPOLIA_RPC:-https://sepolia.unichain.org}"; CHAIN_NAME="Unichain Sepolia"
             PROXY=0x775c9B990ADe401060B78D0e98684eEf8d2466C1; STATE_VIEW_ADDR=0xc199f1072a74d4e905aba1a84d9a45e2546b6222 ;;
   base)     CID=84532; RPC="${BASE_SEPOLIA_RPC:-https://sepolia.base.org}";       CHAIN_NAME="Base Sepolia"
@@ -104,7 +106,7 @@ case "$cmd" in
 
   bench)            # CHAIN=base ./tw.sh bench 30   → N automated live rounds, writes results/
     (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
-    (cd "$ROOT/bench" && CHAIN="${CHAIN:-unichain}" node bench.mjs "${1:-10}") ;;
+    (cd "$ROOT/bench" && CHAIN="$SEL" node bench.mjs "${1:-10}") ;;
 
   abis)             # regenerate the frontend's typed ABIs from Foundry artifacts
     (cd "$ROOT/contracts" && forge build >/dev/null 2>&1) && python "$ROOT/web/scripts/gen-abis.py" "$ROOT" ;;
