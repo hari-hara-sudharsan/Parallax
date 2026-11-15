@@ -3,9 +3,11 @@
   "lpTokenId": 8024,
   "mockUSDC": "0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c",
   "mockWETH": "0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5",
+  "parallaxExecutor": "0x86338DDBD3E2E8546Ff48b3fd4cdb41D40A11181",
+  "parallaxExecutorBlock": 67872175,
+  "parallaxExecutorV1": "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9",
+  "parallaxExecutorV2": "0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af",
   "poolId": "0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c",
   "rangeGuardPositionId": 8025,
-  "startPrice": 3000,
-  "parallaxExecutor": "0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af",
-  "parallaxExecutorV1": "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9"
+  "startPrice": 3000
 }
