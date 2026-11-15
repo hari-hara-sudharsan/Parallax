@@ -57,9 +57,19 @@ Addresses are saved to `contracts/deployments/1301.json`.
 ## 6. Frontend
 
 ```bash
-cp web/.env.local.example web/.env.local   # paste poolId / token addresses from 1301.json
-cd web && npm run dev                      # http://localhost:3000
+cd web
+npm install
+npm run dev        # http://localhost:3000. Works against the live testnet deployment out of the box.
+npm run smoke      # optional: checks every live data path without a browser
 ```
+
+In MetaMask, use the same wallet, switch to **Unichain Sepolia** (the app offers a one-click switch), then:
+1. **Demo controls → Get test tokens** (50 mWETH + 150k mUSDC)
+2. **Create a rule → Stop-loss** → *Arm stop-loss*
+3. **Demo controls → ▼ Crash the price** → watch **Live activity** go ① → ② → ③ with the latency
+
+To use your own deployment instead, copy `web/.env.local.example` to `web/.env.local` and fill it in from
+`contracts/deployments/*.json`.
 
 ## Troubleshooting
 
