@@ -97,6 +97,21 @@ case "$cmd" in
     bal "Reactive Lasna"   "${LASNA_RPC}"
     ;;
 
+  get-react)        # ./tw.sh get-react sepolia 0.045ether   (or: base 0.1ether)
+    # Official lREACT faucets (Reactive docs): 1 ETH → 100 lREACT. NEVER more than 5 ETH per tx (excess is lost).
+    need_env PRIVATE_KEY
+    case "${1:-sepolia}" in
+      sepolia) FAUCET=0x9b9BB25f1A81078C544C829c5EB7822d747Cf434; RPC="$SEPOLIA_RPC" ;;
+      base)    FAUCET=0x2afaFD298b23b62760711756088F75B7409f5967; RPC="$BASE_SEPOLIA_RPC" ;;
+      *) echo "usage: ./tw.sh get-react <sepolia|base> <amount, e.g. 0.045ether>"; exit 1 ;;
+    esac
+    AMT="${2:-0.045ether}"
+    WEI=$(cast to-wei "${AMT%ether}"); (( $(cast to-unit "$WEI" ether | cut -d. -f1) < 5 )) || { echo "✗ max 5 ETH per tx"; exit 1; }
+    ADDR=$(cast wallet address --private-key "$PRIVATE_KEY")
+    echo "Sending $AMT to the $1 lREACT faucet for $ADDR …"
+    cast send "$FAUCET" "request(address)" "$ADDR" --value "$AMT" --rpc-url "$RPC" --private-key "$PRIVATE_KEY"
+    echo "✓ lREACT arrives on Lasna shortly. Check with ./tw.sh wallet" ;;
+
   pool-state)
     need_env UNICHAIN_SEPOLIA_RPC STATE_VIEW
     POOL_ID=$(grep -o '"poolId": *"0x[0-9a-fA-F]*"' "$ROOT/contracts/deployments/1301.json" | grep -o '0x[0-9a-fA-F]*')
@@ -127,6 +142,7 @@ case "$cmd" in
     cat <<'EOF'
 Tripwire tasks (./tw.sh <task>  or  make <task>)
   wallet         show deployer address + balances on every chain
+  get-react <sepolia|base> <amt>  buy lREACT from the official faucet (e.g. sepolia 0.045ether)
   install        fetch git submodules (forge-std, reactive-lib-omni, v4-periphery)
   build / test   compile / run Foundry tests
   rehearse       run the full demo-pool flow on a local Unichain Sepolia fork (no keys, no gas)
