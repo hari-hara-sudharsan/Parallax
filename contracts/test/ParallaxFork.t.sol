@@ -24,6 +24,7 @@ import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
 import {ParallaxExecutor} from "../src/ParallaxExecutor.sol";
 import {ParallaxReactive} from "../src/ParallaxReactive.sol";
+import {V4LiquidityOps} from "../src/base/V4LiquidityOps.sol";
 import {IParallaxExecutor} from "../src/interfaces/IParallaxExecutor.sol";
 import {Rule, RuleType, RuleStatus, SkipReason, NO_LOWER, NO_UPPER} from "../src/libraries/RuleTypes.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
@@ -378,7 +379,7 @@ contract ParallaxForkTest is Test {
     }
 
     function test_unlockCallback_onlyPoolManager() public {
-        vm.expectRevert(ParallaxExecutor.NotPoolManager.selector);
+        vm.expectRevert(V4LiquidityOps.NotPoolManager.selector);
         executor.unlockCallback("");
     }
 

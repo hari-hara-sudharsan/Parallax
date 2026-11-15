@@ -69,6 +69,20 @@ case "$cmd" in
     CHAIN=unichain "$0" deploy-executor && CHAIN=unichain "$0" add-chain
     CHAIN=base     "$0" deploy-executor && CHAIN=base     "$0" add-chain
     CHAIN=unichain "$0" debts; CHAIN=base "$0" debts ;;
+  # ── Parallax Vault (keeperless managed LP). Order: brain (Lasna) → vault (chain) → set-vault (Lasna) ──
+  deploy-vault-reactive) VAULT_CHAIN_ID=$CID lasna_script script/11_DeployVaultReactive.s.sol:DeployVaultReactive ;;
+  deploy-vault)          chain_script script/12_DeployVault.s.sol:DeployVault ;;
+  set-vault)             lasna_script script/13_SetVault.s.sol:SetVault ;;
+  vault-deposit)         chain_script script/14_VaultDeposit.s.sol:VaultDeposit ;;
+  deploy-vault-all)      # CHAIN=base ./tw.sh deploy-vault-all
+    CHAIN=$SEL "$0" deploy-vault-reactive && CHAIN=$SEL "$0" deploy-vault && CHAIN=$SEL "$0" set-vault ;;
+  vault)                 # CHAIN=base ./tw.sh vault  → live vault state
+    V=$(saved $CID parallaxVault)
+    echo "ParallaxVault $V ($CHAIN_NAME)"
+    for f in "mode()(uint8)" "tickLower()(int24)" "tickUpper()(int24)" "anchorTick()(int24)" "inRange()(bool)"              "rebalances()(uint32)" "evacuations()(uint32)" "reentries()(uint32)" "totalSupply()(uint256)" "totalValue0()(uint256)"; do
+      printf '  %-18s %s
+' "${f%%(*}" "$(cast call "$V" "$f" --rpc-url "$RPC")"
+    done ;;
   create-stop-loss)   RULE_KIND=stop-loss   chain_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
   create-take-profit) RULE_KIND=take-profit chain_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
   create-range-guard) chain_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
@@ -189,6 +203,7 @@ Demo pool (per chain)
 Parallax
   deploy-parallax     one ParallaxReactive (Lasna) + an executor on Unichain AND Base, linked with addChain
   deploy-reactive | deploy-executor | add-chain     the individual steps
+  deploy-vault-all    Parallax Vault: brain on Lasna + vault on CHAIN + wiring; vault-deposit; vault (state)
   create-stop-loss | create-take-profit | create-range-guard
   create-trailing-stop (TRAIL_BPS)  |  create-recenter-guard (LP guard that re-centres instead of withdrawing)
   fund-reactive [amt] / fund-executor [amt]         top up lREACT / callback ETH
