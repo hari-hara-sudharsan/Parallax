@@ -111,17 +111,44 @@ async function enrich(chain: ChainDeployment, ruleId: bigint, rec: ExecRecord): 
   return out;
 }
 
-/** Lasna has no logs API; estimate the Lasna block from T0 (~1 block/s) and search ±300 blocks. */
+/** Lasna block timestamps, cached (blocks are final, and each lookup below reads ~23 of them). */
+const lasnaTs = new Map<bigint, number>();
+async function lasnaTimestamp(n: bigint) {
+  let t = lasnaTs.get(n);
+  if (t === undefined) {
+    t = Number((await lasnaClient.getBlock({ blockNumber: n })).timestamp);
+    lasnaTs.set(n, t);
+  }
+  return t;
+}
+
+/**
+ * First Lasna block at or after timestamp `ts`, by binary search. Lasna blocks are ~1.06 s, not exactly
+ * 1 s, so a "1 block per second" estimate drifts by hundreds of blocks within a few hours.
+ */
+async function lasnaBlockAt(ts: number, latest: bigint): Promise<bigint> {
+  let lo = REACTIVE.deployBlock;
+  let hi = latest;
+  while (lo < hi) {
+    const mid = (lo + hi) / 2n;
+    if ((await lasnaTimestamp(mid)) < ts) lo = mid + 1n;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Lasna has no logs API here: locate the Lasna block for T0, then search a short window after it. */
 async function findReactiveTx(chain: ChainDeployment, ruleId: bigint, t0: number): Promise<Hex | undefined> {
-  const latest = await lasnaClient.getBlock();
-  const est = latest.number - BigInt(Math.max(0, Number(latest.timestamp) - t0));
+  const latest = await lasnaClient.getBlockNumber();
+  const start = await lasnaBlockAt(t0, latest);
+  const from = start > 60n ? start - 60n : 0n; // clocks differ slightly between chains
   const logs = await lasnaClient.getContractEvents({
     address: REACTIVE.address,
     abi: parallaxReactiveAbi,
     eventName: "RuleTriggered",
     args: { chainId: BigInt(chain.chainId), ruleId },
-    fromBlock: est - 300n,
-    toBlock: est + 300n > latest.number ? latest.number : est + 300n,
+    fromBlock: from,
+    toBlock: start + 600n > latest ? latest : start + 600n,
   });
   return logs.at(-1)?.transactionHash;
 }

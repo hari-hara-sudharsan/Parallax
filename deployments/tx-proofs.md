@@ -145,9 +145,8 @@ no trades**, then a crash. Vault `0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F` (B
 | **Re-enter** after 60 s calm: tick 200604 → 200598 | [`0xf3757fcd…d428392e`](https://sepolia.basescan.org/tx/0xf3757fcd89ffac07a558b99685a001a8dc97d29c7db40133eb21f569d428392e) (block 59100169) | [`0x3971c50c…64e61bda`](https://lasna.reactscan.net/tx/0x3971c50c153c15a63ca512189a6b83606fb431a2635abc70866e5cd964e61bda) (`VaultActionRequested(REENTER, 200598, move 6, origin 0xf3757fcd…)`) | [`0xd8ef476a…ff9f0836`](https://sepolia.basescan.org/tx/0xd8ef476a4f0db4e2dd02de15f62535b1f80f405eea619c044e1ecf0aff9f0836) (block 59100177): new range [200280, 200880), 453,505 gas | **8 blocks ≈ 1.6 s** |
 
 The fix is visible on-chain: in v1 the quiet-spell crash produced a re-centre; in v2 the same scenario produced an
-evacuation. (The evacuation row's Lasna tx is the brain's only other action request in this run; its event also
-carries the origin hash. The Lasna RPC was unreachable from this network when the table was written, so that
-field was linked by order rather than decoded.)
+evacuation. Both Lasna txs were decoded on-chain: `VaultActionRequested(EVACUATE, …, origin 0x2ba135d5…)` and
+`VaultActionRequested(REENTER, …, origin 0xf3757fcd…)` name exactly the origin swaps in their rows.
 
 ---
 

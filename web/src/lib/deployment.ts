@@ -82,6 +82,7 @@ export const chainById = (id: number) => CHAIN_LIST.find((c) => c.chainId === id
 
 export const REACTIVE = {
   address: "0xDf554201dec784F0541FA5fc884240c73113e334" as Address,
+  deployBlock: 8399503n, // Lasna nodes prune old blocks: searches start here, never at block 1
   systemContract: "0x8888888888888888888888888888888888888888" as Address,
 };
 

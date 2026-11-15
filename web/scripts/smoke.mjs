@@ -54,11 +54,17 @@ for (const C of CHAINS) {
   log ? ok(`${C.name}: rule ${id} callback ${log.transactionHash.slice(0, 10)}… found from the on-chain record (1-block query)`) : bad(`${C.name}: callback log not found`);
 
   const t0 = Number((await pub.getBlock({ blockNumber: ex[1] })).timestamp);
-  const lb = await lasna.getBlock();
-  const est = lb.number - BigInt(Math.max(0, Number(lb.timestamp) - t0));
+  // Same as useActivity: binary-search the Lasna block for T0 (Lasna blocks are ~1.06 s, so estimates drift).
+  const latestN = await lasna.getBlockNumber();
+  let lo = 8399503n, hi = latestN; // reactive deploy block (Lasna prunes older blocks)
+  while (lo < hi) {
+    const mid = (lo + hi) / 2n;
+    if (Number((await lasna.getBlock({ blockNumber: mid })).timestamp) < t0) lo = mid + 1n;
+    else hi = mid;
+  }
   const trig = await lasna.getContractEvents({
     address: REACTIVE, abi: reactiveAbi, eventName: "RuleTriggered", args: { chainId: BigInt(C.chain.id), ruleId: id },
-    fromBlock: est - 300n, toBlock: est + 300n > lb.number ? lb.number : est + 300n,
+    fromBlock: lo - 60n, toBlock: lo + 600n > latestN ? latestN : lo + 600n,
   });
   const hit = trig.find((t) => toHex(t.args.originTxHash, { size: 32 }) === toHex(ex[0], { size: 32 }));
   hit
