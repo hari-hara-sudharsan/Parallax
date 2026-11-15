@@ -6,6 +6,7 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {Chains} from "./Chains.sol";
 
 /// @title DemoBase
 /// @notice Shared plumbing for the demo scripts: reads env, builds our PoolKey,
@@ -43,8 +44,14 @@ abstract contract DemoBase is Script {
         return vm.parseJsonAddress(vm.readFile(path), string.concat(".", key));
     }
 
-    uint256 internal constant UNICHAIN_SEPOLIA = 1301;
-    uint256 internal constant LASNA = 5318007;
+    uint256 internal constant UNICHAIN_SEPOLIA = Chains.UNICHAIN_SEPOLIA;
+    uint256 internal constant BASE_SEPOLIA = Chains.BASE_SEPOLIA;
+    uint256 internal constant LASNA = Chains.LASNA;
+
+    /// @notice Official Uniswap v4 + Reactive addresses for the chain this script runs on.
+    function _addrs() internal view returns (Chains.Addrs memory) {
+        return Chains.get(block.chainid);
+    }
 
     function _hasDeployments() internal view returns (bool) {
         return vm.exists(_deploymentsPath());

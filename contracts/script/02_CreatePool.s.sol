@@ -16,7 +16,7 @@ contract CreatePool is DemoBase {
     function run() external {
         (uint256 pk,) = _deployer();
         uint256 startPrice = vm.envOr("START_PRICE", uint256(3000));
-        address posm = vm.envAddress("POSITION_MANAGER");
+        address posm = _addrs().positionManager;
 
         PoolKey memory key = _poolKey();
         (uint256 a1, uint256 a0) = _rawRatio(startPrice);

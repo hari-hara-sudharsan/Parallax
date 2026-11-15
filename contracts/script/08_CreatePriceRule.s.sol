@@ -49,7 +49,7 @@ contract CreatePriceRule is DemoBase {
 
     /// @dev WETH price (USDC per WETH) moves WITH the tick if WETH is currency0, AGAINST it otherwise.
     function _bounds(bool takeProfit) internal view returns (int24 lower, int24 upper) {
-        (, int24 tick,,) = IPoolManager(vm.envAddress("POOL_MANAGER")).getSlot0(_poolKey().toId());
+        (, int24 tick,,) = IPoolManager(_addrs().poolManager).getSlot0(_poolKey().toId());
         int24 moveTicks = int24(int256(vm.envOr("RULE_MOVE_BPS", uint256(300))));
         bool tickDown = (!takeProfit) == _wethIsCurrency0();
         (lower, upper) = tickDown ? (tick - moveTicks, NO_UPPER) : (NO_LOWER, tick + moveTicks);

@@ -26,8 +26,8 @@ contract PushPrice is DemoBase {
 
     function run() external {
         (uint256 pk,) = _deployer();
-        IPoolManager manager = IPoolManager(vm.envAddress("POOL_MANAGER"));
-        PoolSwapTest router = PoolSwapTest(vm.envAddress("POOL_SWAP_TEST"));
+        IPoolManager manager = IPoolManager(_addrs().poolManager);
+        PoolSwapTest router = PoolSwapTest(_addrs().poolSwapTest);
 
         bool down = keccak256(bytes(vm.envOr("PUSH_DIRECTION", string("down")))) == keccak256("down");
         PoolKey memory key = _poolKey();

@@ -27,7 +27,7 @@ contract CreateRangeGuard is DemoBase {
     function run() external {
         (uint256 pk, address me) = _deployer();
         ParallaxExecutor executor = ParallaxExecutor(payable(_readAddress("parallaxExecutor")));
-        IPositionManager posm = IPositionManager(vm.envAddress("POSITION_MANAGER"));
+        IPositionManager posm = IPositionManager(_addrs().positionManager);
         uint256 positionId = vm.envOr("RG_POSITION_ID", uint256(0));
 
         vm.startBroadcast(pk);
@@ -53,7 +53,7 @@ contract CreateRangeGuard is DemoBase {
     }
 
     function _narrowRange() internal view returns (int24 tickLower, int24 tickUpper) {
-        (, int24 tick,,) = IPoolManager(vm.envAddress("POOL_MANAGER")).getSlot0(_poolKey().toId());
+        (, int24 tick,,) = IPoolManager(_addrs().poolManager).getSlot0(_poolKey().toId());
         int24 width = int24(int256(vm.envOr("RG_WIDTH_TICKS", uint256(600))));
         int24 base = PoolMath.floorToSpacing(tick, TICK_SPACING);
         (tickLower, tickUpper) = (base - width, base + width);
@@ -79,7 +79,7 @@ contract CreateRangeGuard is DemoBase {
     }
 
     function _approveViaPermit2(address posm) internal {
-        IAllowanceTransfer permit2 = IAllowanceTransfer(vm.envAddress("PERMIT2"));
+        IAllowanceTransfer permit2 = IAllowanceTransfer(_addrs().permit2);
         address[2] memory tokens = [_weth(), _usdc()];
         for (uint256 i; i < 2; ++i) {
             IERC20(tokens[i]).approve(address(permit2), type(uint256).max);

@@ -25,8 +25,8 @@ contract AddLiquidity is DemoBase {
 
     function run() external {
         (uint256 pk, address me) = _deployer();
-        IPositionManager posm = IPositionManager(vm.envAddress("POSITION_MANAGER"));
-        IAllowanceTransfer permit2 = IAllowanceTransfer(vm.envAddress("PERMIT2"));
+        IPositionManager posm = IPositionManager(_addrs().positionManager);
+        IAllowanceTransfer permit2 = IAllowanceTransfer(_addrs().permit2);
         PoolKey memory key = _poolKey();
 
         bytes memory unlockData = _plan(key, me);
@@ -67,7 +67,7 @@ contract AddLiquidity is DemoBase {
         view
         returns (uint128 liquidity, uint256 amount0, uint256 amount1)
     {
-        (uint160 sqrtP, int24 tickNow,,) = IPoolManager(vm.envAddress("POOL_MANAGER")).getSlot0(key.toId());
+        (uint160 sqrtP, int24 tickNow,,) = IPoolManager(_addrs().poolManager).getSlot0(key.toId());
         require(sqrtP != 0, "pool not initialized: run make create-pool");
         console2.log("current tick:", tickNow);
 

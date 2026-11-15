@@ -2,6 +2,8 @@
 # Parallax task runner. Works in Git Bash (Windows), macOS and Linux.
 #   ./tw.sh help
 # The Makefile just forwards to this script, so `make <task>` == `./tw.sh <task>`.
+#
+# Chain selection: CHAIN=unichain (default) or CHAIN=base, e.g.  CHAIN=base ./tw.sh push-down
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,20 +14,32 @@ if [[ -f "$ROOT/.env" ]]; then set -a; source "$ROOT/.env"; set +a; fi
 
 need_env() { for v in "$@"; do [[ -n "${!v:-}" ]] || { echo "✗ $v is not set. Copy .env.example to .env and fill it in."; exit 1; }; done; }
 
-# forge script against Unichain Sepolia, broadcasting real transactions.
-uni_script() {
-  need_env PRIVATE_KEY UNICHAIN_SEPOLIA_RPC
-  (cd "$ROOT/contracts" && forge script "$1" --rpc-url "$UNICHAIN_SEPOLIA_RPC" --broadcast --slow -vv)
+# ── Chain config (official addresses: deployments/addresses.md, contracts/script/Chains.sol) ──
+SYSTEM_CONTRACT=${SYSTEM_CONTRACT:-0x8888888888888888888888888888888888888888}
+LASNA_ID=5318007
+case "${CHAIN:-unichain}" in
+  unichain) CID=1301;  RPC="${UNICHAIN_SEPOLIA_RPC:-https://sepolia.unichain.org}"; CHAIN_NAME="Unichain Sepolia"
+            PROXY=0x775c9B990ADe401060B78D0e98684eEf8d2466C1; STATE_VIEW_ADDR=0xc199f1072a74d4e905aba1a84d9a45e2546b6222 ;;
+  base)     CID=84532; RPC="${BASE_SEPOLIA_RPC:-https://sepolia.base.org}";       CHAIN_NAME="Base Sepolia"
+            PROXY=0x476F44b11F5C942c58f4c8E3d0300E5710743585; STATE_VIEW_ADDR=0x571291b572ed32ce6751a2cb2486ebee8defb9b4 ;;
+  *) echo "✗ CHAIN must be unichain or base"; exit 1 ;;
+esac
+LASNA_RPC=${LASNA_RPC:-https://lasna-rpc.rnk.dev/}
+
+# forge script against the selected chain, broadcasting real transactions.
+chain_script() {
+  need_env PRIVATE_KEY
+  (cd "$ROOT/contracts" && forge script "$1" --rpc-url "$RPC" --broadcast --slow -vv)
 }
 
 # forge script against Reactive Lasna. Set LASNA_FLAGS (e.g. "--legacy") if the node rejects EIP-1559 txs.
 lasna_script() {
-  need_env PRIVATE_KEY LASNA_RPC
+  need_env PRIVATE_KEY
   (cd "$ROOT/contracts" && forge script "$1" --rpc-url "$LASNA_RPC" --broadcast --slow -vv ${LASNA_FLAGS:-})
 }
 
-# Read a saved address from contracts/deployments/<chainId>.json
-saved() { grep -o "\"$2\": *\"0x[0-9a-fA-F]*\"" "$ROOT/contracts/deployments/$1.json" | grep -o '0x[0-9a-fA-F]*'; }
+# Read a saved value from contracts/deployments/<chainId>.json
+saved() { grep -o "\"$2\": *\"\?0x[0-9a-fA-F]*\"\?" "$ROOT/contracts/deployments/$1.json" 2>/dev/null | grep -o '0x[0-9a-fA-F]*' || true; }
 
 ANVIL_PORT=8545
 ANVIL_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80   # anvil's public test key #0
@@ -36,82 +50,61 @@ case "$cmd" in
   build)        (cd "$ROOT/contracts" && forge build) ;;
   test)         (cd "$ROOT/contracts" && forge test -vv "$@") ;;
 
-  # ── Demo pool on Unichain Sepolia (Phase 1) ─────────────────────────────
-  deploy-tokens) uni_script script/01_DeployTokens.s.sol:DeployTokens ;;
-  create-pool)   uni_script script/02_CreatePool.s.sol:CreatePool ;;
-  add-liquidity) uni_script script/03_AddLiquidity.s.sol:AddLiquidity ;;
+  # ── Demo pool (per chain) ───────────────────────────────────────────────
+  deploy-tokens) chain_script script/01_DeployTokens.s.sol:DeployTokens ;;
+  create-pool)   chain_script script/02_CreatePool.s.sol:CreatePool ;;
+  add-liquidity) chain_script script/03_AddLiquidity.s.sol:AddLiquidity ;;
   demo-pool)     "$0" deploy-tokens && "$0" create-pool && "$0" add-liquidity ;;
-  push-down)     PUSH_DIRECTION=down uni_script script/04_PushPrice.s.sol:PushPrice ;;
-  push-up)       PUSH_DIRECTION=up   uni_script script/04_PushPrice.s.sol:PushPrice ;;
+  push-down)     PUSH_DIRECTION=down chain_script script/04_PushPrice.s.sol:PushPrice ;;
+  push-up)       PUSH_DIRECTION=up   chain_script script/04_PushPrice.s.sol:PushPrice ;;
 
-  # ── Parallax core loop (Phase 2). Order is forced by the docs: Reactive → Executor → setExecutor ──
+  # ── Parallax deployment. Forced order: Reactive → Executor per chain → addChain per chain ──
   deploy-reactive)  lasna_script script/05_DeployReactive.s.sol:DeployReactive ;;
-  deploy-executor)  uni_script   script/06_DeployExecutor.s.sol:DeployExecutor ;;
-  set-executor)     lasna_script script/07_SetExecutor.s.sol:SetExecutor ;;
-  deploy-parallax)  "$0" deploy-reactive && "$0" deploy-executor && "$0" set-executor && "$0" debts ;;
-  create-stop-loss)   RULE_KIND=stop-loss   uni_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
-  create-take-profit) RULE_KIND=take-profit uni_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
-  create-range-guard) uni_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
+  deploy-executor)  chain_script script/06_DeployExecutor.s.sol:DeployExecutor ;;
+  add-chain)        ADD_CHAIN_ID=$CID lasna_script script/07_AddChain.s.sol:AddChain ;;
+  deploy-parallax)  # one reactive on Lasna guarding BOTH chains
+    "$0" deploy-reactive
+    CHAIN=unichain "$0" deploy-executor && CHAIN=unichain "$0" add-chain
+    CHAIN=base     "$0" deploy-executor && CHAIN=base     "$0" add-chain
+    CHAIN=unichain "$0" debts; CHAIN=base "$0" debts ;;
+  create-stop-loss)   RULE_KIND=stop-loss   chain_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
+  create-take-profit) RULE_KIND=take-profit chain_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
+  create-range-guard) chain_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
 
   # Top-ups, credited to reserves via depositTo (the docs' recommended route).
   fund-reactive)    # ./tw.sh fund-reactive 1ether
-    need_env PRIVATE_KEY LASNA_RPC SYSTEM_CONTRACT
-    cast send "$SYSTEM_CONTRACT" "depositTo(address)" "$(saved 5318007 parallaxReactive)" --value "${1:-1ether}" \
+    need_env PRIVATE_KEY
+    cast send "$SYSTEM_CONTRACT" "depositTo(address)" "$(saved $LASNA_ID parallaxReactive)" --value "${1:-1ether}" \
       --rpc-url "$LASNA_RPC" --private-key "$PRIVATE_KEY" ${LASNA_FLAGS:-} ;;
-  fund-executor)    # ./tw.sh fund-executor 0.01ether
-    need_env PRIVATE_KEY UNICHAIN_SEPOLIA_RPC UNICHAIN_CALLBACK_PROXY
-    cast send "$UNICHAIN_CALLBACK_PROXY" "depositTo(address)" "$(saved 1301 parallaxExecutor)" --value "${1:-0.01ether}" \
-      --rpc-url "$UNICHAIN_SEPOLIA_RPC" --private-key "$PRIVATE_KEY" ;;
+  fund-executor)    # CHAIN=base ./tw.sh fund-executor 0.001ether
+    need_env PRIVATE_KEY
+    cast send "$PROXY" "depositTo(address)" "$(saved $CID parallaxExecutor)" --value "${1:-0.001ether}" \
+      --rpc-url "$RPC" --private-key "$PRIVATE_KEY" ;;
 
-  debts)            # balances / reserves / debt on both sides (any debt > 0 stops service)
-    R=$(saved 5318007 parallaxReactive || true); E=$(saved 1301 parallaxExecutor || true)
+  debts)            # balances / reserves / debt (any debt > 0 stops service)
+    R=$(saved $LASNA_ID parallaxReactive); E=$(saved $CID parallaxExecutor)
     if [[ -n "$R" ]]; then
       echo "ParallaxReactive $R (Lasna)"
       echo "  balance  $(cast balance "$R" --ether --rpc-url "$LASNA_RPC")"
-      echo "  reserves $(cast call "$SYSTEM_CONTRACT" 'reserves(address)(uint256)' "$R" --rpc-url "$LASNA_RPC")"
       echo "  debt     $(cast call "$SYSTEM_CONTRACT" 'debt(address)(uint256)' "$R" --rpc-url "$LASNA_RPC")"
     fi
     if [[ -n "$E" ]]; then
-      echo "ParallaxExecutor $E (Unichain Sepolia)"
-      echo "  balance  $(cast balance "$E" --ether --rpc-url "$UNICHAIN_SEPOLIA_RPC")"
-      echo "  reserves $(cast call "$UNICHAIN_CALLBACK_PROXY" 'reserves(address)(uint256)' "$E" --rpc-url "$UNICHAIN_SEPOLIA_RPC")"
-      echo "  debt     $(cast call "$UNICHAIN_CALLBACK_PROXY" 'debt(address)(uint256)' "$E" --rpc-url "$UNICHAIN_SEPOLIA_RPC")"
+      echo "ParallaxExecutor $E ($CHAIN_NAME)"
+      echo "  balance  $(cast balance "$E" --ether --rpc-url "$RPC")"
+      echo "  reserves $(cast call "$PROXY" 'reserves(address)(uint256)' "$E" --rpc-url "$RPC")"
+      echo "  debt     $(cast call "$PROXY" 'debt(address)(uint256)' "$E" --rpc-url "$RPC")"
     fi ;;
 
-  rule)             # ./tw.sh rule 1   → on-chain status of a rule
-    E=$(saved 1301 parallaxExecutor)
-    cast call "$E" "getRule(uint256)((address,uint8,uint8,bool,int24,int24,uint16,uint128,uint64,bytes32,uint256))" "${1:?ruleId}" \
-      --rpc-url "$UNICHAIN_SEPOLIA_RPC"
+  rule)             # CHAIN=base ./tw.sh rule 1   → on-chain status + execution record of a rule
+    E=$(saved $CID parallaxExecutor)
+    cast call "$E" "getRule(uint256)((address,uint8,uint8,bool,int24,int24,uint16,uint128,uint64,bytes32,uint256))" "${1:?ruleId}" --rpc-url "$RPC"
+    echo "execution (originTx, originBlock, executedBlock, executedAt):"
+    cast call "$E" "executions(uint256)(uint256,uint64,uint64,uint64)" "$1" --rpc-url "$RPC"
     echo "(status: 1=ACTIVE 2=EXECUTED 3=CANCELLED)" ;;
 
-  proof)            # ./tw.sh proof <originSwapTx>  → finds the reactive tx + callback tx, prints a proof row
-    O="${1:?origin swap tx hash}"; O=$(echo "$O" | tr 'A-F' 'a-f'); OH=${O#0x}
-    R=$(saved 5318007 parallaxReactive); E=$(saved 1301 parallaxExecutor)
-    OB=$(cast receipt "$O" blockNumber --rpc-url "$UNICHAIN_SEPOLIA_RPC")
-    T0=$(cast block "$OB" --field timestamp --rpc-url "$UNICHAIN_SEPOLIA_RPC")
-    # Reactive side: RuleTriggered(ruleId, poolId, tick, originTxHash) logs that carry this origin hash.
-    LB=$(cast block-number --rpc-url "$LASNA_RPC")
-    RT=$(cast logs --address "$R" "$(cast keccak 'RuleTriggered(uint256,bytes32,int24,uint256)')" \
-          --from-block $((LB-900)) --to-block latest --rpc-url "$LASNA_RPC" --json \
-        | python -c "import json,sys; print(' '.join(l['transactionHash'] for l in json.load(sys.stdin) if '$OH' in l['data']))")
-    # Destination side: RuleExecuted logs whose data carries this origin hash.
-    EX=$(cast logs --address "$E" "$(cast keccak 'RuleExecuted(uint256,address,int24,uint256,uint256,uint256,uint256)')" \
-          --from-block "$OB" --to-block latest --rpc-url "$UNICHAIN_SEPOLIA_RPC" --json \
-        | python -c "
-import json,sys
-for l in json.load(sys.stdin):
-    d=l['data'][2:]
-    if '$OH' in d:
-        w=[d[i:i+64] for i in range(0,len(d),64)]
-        print(l['transactionHash'], int(l['topics'][1],16), int(w[1],16), int(w[2],16), int(w[4],16))")
-    echo "origin   $O  block $OB  T0=$T0"
-    for t in $RT; do echo "reactive $t  (Lasna)"; done
-    while read -r tx rule a0 a1 t1; do
-      [[ -z "$tx" ]] && continue
-      echo "callback $tx  rule $rule  amount0Out=$a0 amount1Out=$a1  T1=$t1"
-      echo "latency  $((t1 - T0)) s"
-    done <<< "$EX"
-    if [[ -z "$EX" ]]; then echo "callback (not found yet: try again in a few seconds)"; fi ;;
+  bench)            # CHAIN=base ./tw.sh bench 30   → N automated live rounds, writes results/
+    (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
+    (cd "$ROOT/bench" && CHAIN="${CHAIN:-unichain}" node bench.mjs "${1:-10}") ;;
 
   abis)             # regenerate the frontend's typed ABIs from Foundry artifacts
     (cd "$ROOT/contracts" && forge build >/dev/null 2>&1) && python "$ROOT/web/scripts/gen-abis.py" "$ROOT" ;;
@@ -125,39 +118,37 @@ for l in json.load(sys.stdin):
     ADDR=$(cast wallet address --private-key "$PRIVATE_KEY")
     echo "deployer: $ADDR"
     bal() { printf "  %-18s %s\n" "$1" "$(cast balance "$ADDR" --ether --rpc-url "$2" 2>/dev/null || echo 'unreachable')"; }
-    bal "Unichain Sepolia" "${UNICHAIN_SEPOLIA_RPC}"
-    bal "Base Sepolia"     "${BASE_SEPOLIA_RPC}"
-    bal "Ethereum Sepolia" "${SEPOLIA_RPC}"
-    bal "Reactive Lasna"   "${LASNA_RPC}"
+    bal "Unichain Sepolia" "${UNICHAIN_SEPOLIA_RPC:-https://sepolia.unichain.org}"
+    bal "Base Sepolia"     "${BASE_SEPOLIA_RPC:-https://sepolia.base.org}"
+    bal "Ethereum Sepolia" "${SEPOLIA_RPC:-https://ethereum-sepolia-rpc.publicnode.com}"
+    bal "Reactive Lasna"   "$LASNA_RPC"
     ;;
 
   get-react)        # ./tw.sh get-react sepolia 0.045ether   (or: base 0.1ether)
     # Official lREACT faucets (Reactive docs): 1 ETH → 100 lREACT. NEVER more than 5 ETH per tx (excess is lost).
     need_env PRIVATE_KEY
     case "${1:-sepolia}" in
-      sepolia) FAUCET=0x9b9BB25f1A81078C544C829c5EB7822d747Cf434; RPC="$SEPOLIA_RPC" ;;
-      base)    FAUCET=0x2afaFD298b23b62760711756088F75B7409f5967; RPC="$BASE_SEPOLIA_RPC" ;;
+      sepolia) FAUCET=0x9b9BB25f1A81078C544C829c5EB7822d747Cf434; FRPC="${SEPOLIA_RPC:-https://ethereum-sepolia-rpc.publicnode.com}" ;;
+      base)    FAUCET=0x2afaFD298b23b62760711756088F75B7409f5967; FRPC="${BASE_SEPOLIA_RPC:-https://sepolia.base.org}" ;;
       *) echo "usage: ./tw.sh get-react <sepolia|base> <amount, e.g. 0.045ether>"; exit 1 ;;
     esac
     AMT="${2:-0.045ether}"
     WEI=$(cast to-wei "${AMT%ether}"); (( $(cast to-unit "$WEI" ether | cut -d. -f1) < 5 )) || { echo "✗ max 5 ETH per tx"; exit 1; }
     ADDR=$(cast wallet address --private-key "$PRIVATE_KEY")
     echo "Sending $AMT to the $1 lREACT faucet for $ADDR …"
-    cast send "$FAUCET" "request(address)" "$ADDR" --value "$AMT" --rpc-url "$RPC" --private-key "$PRIVATE_KEY"
+    cast send "$FAUCET" "request(address)" "$ADDR" --value "$AMT" --rpc-url "$FRPC" --private-key "$PRIVATE_KEY"
     echo "✓ lREACT arrives on Lasna shortly. Check with ./tw.sh wallet" ;;
 
   pool-state)
-    need_env UNICHAIN_SEPOLIA_RPC STATE_VIEW
-    POOL_ID=$(grep -o '"poolId": *"0x[0-9a-fA-F]*"' "$ROOT/contracts/deployments/1301.json" | grep -o '0x[0-9a-fA-F]*')
-    echo "poolId: $POOL_ID"
-    cast call "$STATE_VIEW" "getSlot0(bytes32)(uint160,int24,uint24,uint24)" "$POOL_ID" --rpc-url "$UNICHAIN_SEPOLIA_RPC"
+    POOL_ID=$(saved $CID poolId)
+    echo "$CHAIN_NAME poolId: $POOL_ID"
+    cast call "$STATE_VIEW_ADDR" "getSlot0(bytes32)(uint160,int24,uint24,uint24)" "$POOL_ID" --rpc-url "$RPC"
     ;;
 
-  # ── Rehearsal: run the whole Phase 1 flow on a local fork. Free, no keys needed. ──
+  # ── Rehearsal: run the whole demo-pool flow on a local fork. Free, no keys needed. ──
   rehearse)
-    need_env UNICHAIN_SEPOLIA_RPC
     echo "▶ starting anvil fork of Unichain Sepolia (local chain id 31337)…"
-    anvil --fork-url "$UNICHAIN_SEPOLIA_RPC" --chain-id 31337 --port $ANVIL_PORT --silent &
+    anvil --fork-url "${UNICHAIN_SEPOLIA_RPC:-https://sepolia.unichain.org}" --chain-id 31337 --port $ANVIL_PORT --silent &
     APID=$!; trap 'kill $APID 2>/dev/null || true' EXIT
     for i in $(seq 1 30); do cast block-number --rpc-url http://127.0.0.1:$ANVIL_PORT >/dev/null 2>&1 && break; sleep 1; done
     rm -f "$ROOT/contracts/deployments/31337.json"
@@ -174,32 +165,29 @@ for l in json.load(sys.stdin):
 
   help|*)
     cat <<'EOF'
-Parallax tasks (./tw.sh <task>  or  make <task>)
-  wallet         show deployer address + balances on every chain
-  get-react <sepolia|base> <amt>  buy lREACT from the official faucet (e.g. sepolia 0.045ether)
-  install        fetch git submodules (forge-std, reactive-lib-omni, v4-periphery)
-  build / test   compile / run Foundry tests
-  rehearse       run the full demo-pool flow on a local Unichain Sepolia fork (no keys, no gas)
-  demo-pool      deploy-tokens + create-pool + add-liquidity on Unichain Sepolia
-  deploy-tokens  deploy MockWETH + MockUSDC, mint to your wallet
-  create-pool    initialize the v4 pool at START_PRICE (default 3000 USDC/WETH)
-  add-liquidity  mint an LP position (LP_WETH, LP_USDC, LP_PRICE_LOW, LP_PRICE_HIGH)
-  push-down      sell mWETH to crash the price (PUSH_AMOUNT, default 20)
-  push-up        sell mUSDC to pump the price (PUSH_AMOUNT, default 60000)
-  pool-state     print the pool's current sqrtPrice / tick
+Parallax tasks (./tw.sh <task>  or  make <task>). Pick the chain with CHAIN=unichain (default) or CHAIN=base.
 
-Core loop (Phase 2):
-  deploy-parallax   deploy-reactive (Lasna) + deploy-executor (Unichain) + set-executor (Lasna) + debts
-  create-stop-loss    sell RULE_AMOUNT mWETH (default 1) if WETH drops RULE_MOVE_BPS (default 300 = 3%)
-  create-take-profit  sell RULE_AMOUNT mWETH if WETH rises RULE_MOVE_BPS
-  create-range-guard  mint a narrow LP position (±RG_WIDTH_TICKS, default 600) and guard it
-  fund-reactive [amt]   top up ParallaxReactive reserves (lREACT)
-  fund-executor [amt]   top up ParallaxExecutor callback reserves (ETH)
-  debts             balances / reserves / debt on both sides
-  rule <id>         on-chain status of a rule
-  abis              regenerate web/src/lib/generated/abis.ts from contracts
-  proof <originTx>  origin → reactive → callback tx + latency for one run (proof table row)
-  callbacks <tx>    destination tx hash for a Lasna reactive tx
+Setup
+  wallet              deployer address + balances on every chain
+  get-react <sepolia|base> <amt>   buy lREACT from the official faucet (e.g. sepolia 0.045ether)
+  install / build / test           submodules / compile / Foundry tests
+  rehearse            demo-pool flow on a local Unichain fork (no keys, no gas)
+
+Demo pool (per chain)
+  demo-pool           deploy-tokens + create-pool + add-liquidity
+  push-down / push-up crash / pump the price (PUSH_AMOUNT)
+  pool-state          current sqrtPrice / tick
+
+Parallax
+  deploy-parallax     one ParallaxReactive (Lasna) + an executor on Unichain AND Base, linked with addChain
+  deploy-reactive | deploy-executor | add-chain     the individual steps
+  create-stop-loss | create-take-profit | create-range-guard
+  fund-reactive [amt] / fund-executor [amt]         top up lREACT / callback ETH
+  debts               balances, reserves, debt
+  rule <id>           a rule's status + its on-chain execution record
+  bench <N>           N automated live rounds → results/<chain>-<date>.json + results/SUMMARY.md
+  abis                regenerate web/src/lib/generated/abis.ts
+  callbacks <tx>      Lasna getCallbacks for a reactive tx
 EOF
     ;;
 esac
