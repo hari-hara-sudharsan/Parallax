@@ -40,8 +40,8 @@ export function LiveFeed() {
         <p className="text-[13px] text-muted">No executions yet. Arm a rule, then crash the price.</p>
       ) : (
         <ol className="-mx-6">
-          {items.map((it) => (
-            <Row key={it.key} it={it} />
+          {items.map((it, i) => (
+            <Row key={it.key} it={it} i={i} />
           ))}
         </ol>
       )}
@@ -49,11 +49,14 @@ export function LiveFeed() {
   );
 }
 
-function Row({ it }: { it: FeedItem }) {
+function Row({ it, i }: { it: FeedItem; i: number }) {
   const c = CHAINS[it.chain];
   const done = it.state === "executed";
   return (
-    <li className="animate-slide-in grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-t border-rule px-6 py-3 first:border-t-0">
+    <li
+      className="m-row grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-t border-rule px-6 py-3 transition-colors duration-200 first:border-t-0 hover:bg-raised/40"
+      style={{ "--i": i } as React.CSSProperties}
+    >
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-[13px] text-ink">
           {c.short} <span className="num text-muted">rule #{it.ruleId.toString()}</span>
@@ -78,6 +81,14 @@ function Row({ it }: { it: FeedItem }) {
         </span>
         {done && <span className="text-muted">{outcome(it)}</span>}
       </div>
+      {!done && (
+        // In flight: Reactive has fired on Lasna and the callback is on its way back to the origin chain.
+        <div className="relative col-span-2 mt-1 h-[2px] overflow-hidden rounded-full bg-raised" aria-label="Callback in flight">
+          <span className="m-travel absolute inset-0" style={{ "--travel": "calc(100% - 40px)" } as React.CSSProperties}>
+            <span className="block h-[2px] w-10 rounded-full bg-triggered" />
+          </span>
+        </div>
+      )}
     </li>
   );
 }

@@ -9,7 +9,7 @@ import { useVaultHistory, useVaultState, type VaultEvent } from "@/hooks/useVaul
 import { mockErc20Abi, parallaxVaultAbi } from "@/lib/abis";
 import { CHAINS, LINKS, USDC_DECIMALS, VAULT, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
 import { fmtToken, tickToPrice } from "@/lib/price";
-import { Button, Chip, Field, Panel, Stat, TxLink, cx, inputClass } from "./ui";
+import { AnimatedNumber, Button, Chip, Field, Panel, Stat, TxLink, cx, inputClass } from "./ui";
 
 const chain = CHAINS[VAULT.chain];
 const usd = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -98,29 +98,30 @@ export function VaultPanel() {
 
   return (
     <div className="grid gap-6">
-      <section aria-label="Vault figures" className="rounded-[6px] bg-panel shadow-[0_12px_28px_rgba(0,0,0,.2)]">
+      <section aria-label="Vault figures" style={{ "--i": 0 } as React.CSSProperties} className="m-rise rounded-[6px] bg-panel shadow-[0_12px_28px_rgba(0,0,0,.2)]">
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[6px] bg-line lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div className="col-span-2 bg-panel px-6 py-5 lg:col-span-1">
-            <Stat lead label="Vault value" value={tvl !== undefined ? `$${usd(tvl)}` : "—"} sub="position plus idle tokens, at the live pool price" />
+            <Stat lead label="Vault value" value={<AnimatedNumber value={tvl} format={(n) => `$${usd(n)}`} />} sub="position plus idle tokens, at the live pool price" />
           </div>
           <div className="col-span-2 bg-panel px-6 py-5 sm:col-span-1">
             <div className="text-[12px] text-muted">State</div>
-            <div className="mt-2">{status ?? <span className="num text-faint">—</span>}</div>
+            <div key={s?.mode + String(s?.inRange)} className="m-fade mt-2">{status ?? <span className="num text-faint">—</span>}</div>
           </div>
           <div className="bg-panel px-6 py-5 max-sm:col-span-2">
-            <Stat label="Re-centred" value={s ? s.rebalances : "—"} sub="the price drifted out" />
+            <Stat label="Re-centred" value={<AnimatedNumber value={s?.rebalances} format={(n) => String(Math.round(n))} />} sub="the price drifted out" />
           </div>
           <div className="bg-panel px-6 py-5">
-            <Stat label="Evacuated" value={s ? s.evacuations : "—"} sub={`a ≥ ${VAULT.breakerTicks / 100}% move in ${VAULT.windowSeconds} s`} />
+            <Stat label="Evacuated" value={<AnimatedNumber value={s?.evacuations} format={(n) => String(Math.round(n))} />} sub={`a ≥ ${VAULT.breakerTicks / 100}% move in ${VAULT.windowSeconds} s`} />
           </div>
           <div className="bg-panel px-6 py-5">
-            <Stat label="Re-entered" value={s ? s.reentries : "—"} sub={`after ${VAULT.calmSeconds} s of calm`} />
+            <Stat label="Re-entered" value={<AnimatedNumber value={s?.reentries} format={(n) => String(Math.round(n))} />} sub={`after ${VAULT.calmSeconds} s of calm`} />
           </div>
         </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-12">
         <Panel
+          i={1}
           className="lg:col-span-7"
           title="Where the liquidity sits"
           aside={<span className="num text-[12px] text-faint">{price ? `price $${usd(price)}` : ""}</span>}
@@ -129,7 +130,7 @@ export function VaultPanel() {
             <>
               <div className="relative mt-2 h-10" role="img" aria-label={`Range $${usd(range[0])} to $${usd(range[1])}`}>
                 <div className="absolute inset-x-0 top-[18px] h-1 rounded-full bg-raised" />
-                <div className={cx("absolute inset-x-[8%] top-[18px] h-1 rounded-full", s?.inRange ? "bg-active" : "bg-triggered")} />
+                <div className={cx("absolute inset-x-[8%] top-[18px] h-1 rounded-full transition-colors duration-500", s?.inRange ? "bg-active" : "bg-triggered")} />
                 {pos !== undefined && (
                   <div
                     className="absolute top-[6px] h-7 w-0.5 rounded bg-ink transition-[left] duration-500"
@@ -169,6 +170,7 @@ export function VaultPanel() {
         </Panel>
 
         <Panel
+          i={2}
           className="lg:col-span-5"
           title="Deposit"
           aside={<span className="num text-[12px] text-faint">{address ? `your share $${usd(mine)}` : ""}</span>}
@@ -193,11 +195,16 @@ export function VaultPanel() {
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {needsTokens ? (
-              <Button disabled={flow.busy} onClick={getTokens}>
+              <Button disabled={flow.busy} busy={flow.busy} onClick={getTokens}>
                 {flow.state.status === "running" ? `${flow.state.step}…` : "Get test tokens"}
               </Button>
             ) : (
-              <Button disabled={!address || flow.busy} onClick={deposit}>
+              <Button
+                disabled={!address || flow.busy}
+                busy={flow.busy}
+                progress={flow.state.status === "running" ? (flow.state.index + 0.5) / flow.state.total : undefined}
+                onClick={deposit}
+              >
                 {!address ? "Connect a wallet to deposit" : flow.state.status === "running" ? `${flow.state.step}…` : "Deposit"}
               </Button>
             )}
@@ -219,10 +226,10 @@ export function VaultPanel() {
         </Panel>
       </div>
 
-      <Panel title="What the vault did, on-chain" aside={<span className="num text-[12px] text-faint">{reacted.length} reactive actions</span>}>
+      <Panel i={3} title="What the vault did, on-chain" aside={<span className="num text-[12px] text-faint">{reacted.length} reactive actions</span>}>
         <ul className="-mx-6">
-          {(history ?? []).slice(0, 8).map((e) => (
-            <li key={`${e.tx}-${e.kind}`} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-t border-rule px-6 py-3 first:border-t-0">
+          {(history ?? []).slice(0, 8).map((e, i) => (
+            <li key={`${e.tx}-${e.kind}`} style={{ "--i": i } as React.CSSProperties} className="m-row transition-colors duration-200 hover:bg-raised/40 grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-t border-rule px-6 py-3 first:border-t-0">
               <span className={cx("text-[13px]", e.reason === "evacuate" ? "text-danger" : e.kind === "skipped" ? "text-muted" : "text-ink")}>{eventLabel(e)}</span>
               <span className="num row-span-2 text-right text-[13px] text-ink">
                 {e.latencyBlocks !== undefined ? (

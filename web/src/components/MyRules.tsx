@@ -50,8 +50,8 @@ export function MyRules() {
         <Empty>No rules yet. Arm one in Create a rule.</Empty>
       ) : (
         <ul className="-mx-6">
-          {rules.map((r) => (
-            <li key={r.id.toString()} className="flex min-h-[56px] items-center gap-3 border-t border-rule px-6 py-2.5 first:border-t-0">
+          {rules.map((r, i) => (
+            <li key={r.id.toString()} style={{ "--i": i } as React.CSSProperties} className="m-row transition-colors duration-200 hover:bg-raised/40 flex min-h-[56px] items-center gap-3 border-t border-rule px-6 py-2.5 first:border-t-0">
               <span className="num w-9 shrink-0 text-[12px] text-faint">#{r.id.toString()}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">

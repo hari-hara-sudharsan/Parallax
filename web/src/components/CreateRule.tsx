@@ -37,7 +37,9 @@ export function CreateRule() {
       />
       <p className="mt-3 text-[13px] text-muted">{TABS.find((t) => t.id === tab)!.blurb}</p>
       <div className="mt-5">
-        {tab === "range" ? <RangeGuardForm /> : tab === "trail" ? <TrailingForm /> : <PriceRuleForm kind={tab} key={tab} />}
+        <div key={tab} className="m-fade">
+          {tab === "range" ? <RangeGuardForm /> : tab === "trail" ? <TrailingForm /> : <PriceRuleForm kind={tab} key={tab} />}
+        </div>
       </div>
     </Panel>
   );
@@ -482,11 +484,17 @@ function SubmitRow({
   );
   return (
     <div className="space-y-2">
-      <Button className="w-full" disabled={disabled} onClick={onClick}>
+      <Button
+        className="w-full"
+        disabled={disabled}
+        onClick={onClick}
+        busy={s.status === "running"}
+        progress={s.status === "running" ? (s.index + (s.hash ? 0.5 : 0.15)) / s.total : undefined}
+      >
         {pendingLabel ?? label}
       </Button>
       {s.status === "done" && (
-        <p className="text-[12px] text-executed">
+        <p className="m-fade text-[12px] text-executed">
           Armed: <TxLink href={chain.explorerTx(s.hash)} hash={s.hash} />. Reactive mirrors it within a few seconds.
         </p>
       )}

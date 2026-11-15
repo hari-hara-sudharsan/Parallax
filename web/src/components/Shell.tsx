@@ -65,7 +65,12 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
         <a href="#guards" aria-label="Parallax home" className="mb-6">
           <Mark />
         </a>
-        <ul className="flex flex-col gap-2">
+        <ul className="relative flex flex-col gap-2">
+          <span
+            aria-hidden
+            className="m-slide absolute right-[-1px] top-2 h-6 w-px bg-active"
+            style={{ transform: `translateY(${VIEWS.findIndex((x) => x.id === view) * 48}px)` }}
+          />
           {VIEWS.map((v) => (
             <li key={v.id}>
               <button
@@ -79,8 +84,9 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
                   view === v.id ? "text-ink" : "text-faint hover:text-ink",
                 )}
               >
-                <Icon>{v.icon}</Icon>
-                {view === v.id && <span className="absolute inset-y-2 right-[-1px] w-px bg-active" />}
+                <span className="m-lift inline-flex">
+                  <Icon>{v.icon}</Icon>
+                </span>
               </button>
             </li>
           ))}
@@ -100,6 +106,11 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
         <WalletButton />
       </div>
       <nav aria-label="Parallax views" className="fixed inset-x-0 bottom-0 z-30 grid h-14 grid-cols-3 border-t border-line bg-bg md:hidden">
+        <span
+          aria-hidden
+          className="m-slide absolute left-0 top-[-1px] h-px w-1/3 bg-active"
+          style={{ transform: `translateX(${VIEWS.findIndex((x) => x.id === view) * 100}%)` }}
+        />
         {VIEWS.map((v) => (
           <button
             key={v.id}
@@ -110,7 +121,6 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
           >
             <Icon>{v.icon}</Icon>
             {v.label}
-            {view === v.id && <span className="absolute inset-x-8 top-[-1px] h-px bg-active" />}
           </button>
         ))}
       </nav>

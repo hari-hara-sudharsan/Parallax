@@ -86,6 +86,7 @@ export function DemoPanel() {
         <Button
           variant="ghost"
           disabled={!address || faucet.busy}
+          busy={faucet.busy}
           onClick={async () => {
             await faucet.run([
               { label: "Mint mWETH", request: { address: chain.mockWETH, abi: mockErc20Abi, functionName: "mint", args: [address!, parseUnits("50", WETH_DECIMALS)], chainId: chain.chainId } },
@@ -99,6 +100,7 @@ export function DemoPanel() {
         <Button
           variant="danger"
           disabled={!address || crash.busy || (weth ?? 0) < 20}
+          busy={crash.busy}
           onClick={async () => {
             await crash.run(swapSteps(true));
             after();
@@ -109,6 +111,7 @@ export function DemoPanel() {
         <Button
           variant="ghost"
           disabled={!address || pump.busy || (usdc ?? 0) < 60000}
+          busy={pump.busy}
           onClick={async () => {
             await pump.run(swapSteps(false));
             after();
