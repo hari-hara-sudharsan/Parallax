@@ -3,17 +3,17 @@
 import { formatUnits, type Address } from "viem";
 import { useReadContracts } from "wagmi";
 import { mockErc20Abi } from "@/lib/abis";
-import { DEPLOYMENT, USDC_DECIMALS, WETH_DECIMALS } from "@/lib/deployment";
-import { unichainSepolia } from "@/lib/chains";
+import { USDC_DECIMALS, WETH_DECIMALS, type ChainDeployment } from "@/lib/deployment";
 
-/** The user's mWETH / mUSDC balances (demo tokens). */
-export function useBalances(user?: Address) {
+/** The user's mWETH / mUSDC balances on `chain` (demo tokens). */
+export function useBalances(user: Address | undefined, chain: ChainDeployment) {
+  const chainId = chain.chainId as 84532 | 1301;
   const { data, refetch } = useReadContracts({
     allowFailure: false,
     query: { enabled: Boolean(user), refetchInterval: 4_000 },
     contracts: [
-      { address: DEPLOYMENT.mockWETH, abi: mockErc20Abi, functionName: "balanceOf", args: [user!], chainId: unichainSepolia.id },
-      { address: DEPLOYMENT.mockUSDC, abi: mockErc20Abi, functionName: "balanceOf", args: [user!], chainId: unichainSepolia.id },
+      { address: chain.mockWETH, abi: mockErc20Abi, functionName: "balanceOf", args: [user!], chainId },
+      { address: chain.mockUSDC, abi: mockErc20Abi, functionName: "balanceOf", args: [user!], chainId },
     ],
   });
   return {

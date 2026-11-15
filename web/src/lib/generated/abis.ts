@@ -284,10 +284,49 @@ export const parallaxExecutorAbi = [
         "name": "originTxHash",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "originBlock",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "executions",
+    "inputs": [
+      {
+        "name": "ruleId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "originTxHash",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "originBlock",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "executedBlock",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "executedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -699,6 +738,12 @@ export const parallaxExecutorAbi = [
         "internalType": "uint256"
       },
       {
+        "name": "originBlock",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
         "name": "executedAt",
         "type": "uint256",
         "indexed": false,
@@ -962,23 +1007,7 @@ export const parallaxExecutorAbi = [
 export const parallaxReactiveAbi = [
   {
     "type": "constructor",
-    "inputs": [
-      {
-        "name": "originChainId_",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "poolManager_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "destinationChainId_",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "payable"
   },
   {
@@ -994,19 +1023,6 @@ export const parallaxReactiveAbi = [
         "name": "",
         "type": "uint64",
         "internalType": "uint64"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "DESTINATION_CHAIN_ID",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1039,19 +1055,6 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "function",
-    "name": "ORIGIN_CHAIN_ID",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "PENDING_TIMEOUT",
     "inputs": [],
     "outputs": [
@@ -1059,19 +1062,6 @@ export const parallaxReactiveAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "POOL_MANAGER",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1156,18 +1146,77 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "function",
-    "name": "coverDebt",
-    "inputs": [],
+    "name": "addChain",
+    "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "poolManager",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "executor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "executor",
+    "name": "chainCount",
     "inputs": [],
     "outputs": [
       {
         "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "chainIds",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "chains",
+    "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "poolManager",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "executor",
         "type": "address",
         "internalType": "address"
       }
@@ -1176,8 +1225,20 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "function",
+    "name": "coverDebt",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "mirror",
     "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
       {
         "name": "ruleId",
         "type": "uint256",
@@ -1186,34 +1247,41 @@ export const parallaxReactiveAbi = [
     ],
     "outputs": [
       {
-        "name": "poolId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "lowerTick",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "upperTick",
-        "type": "int24",
-        "internalType": "int24"
-      },
-      {
-        "name": "exists",
-        "type": "bool",
-        "internalType": "bool"
-      },
-      {
-        "name": "pendingSince",
-        "type": "uint64",
-        "internalType": "uint64"
-      },
-      {
-        "name": "index",
-        "type": "uint32",
-        "internalType": "uint32"
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct ParallaxReactive.MirrorRule",
+        "components": [
+          {
+            "name": "poolId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "lowerTick",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "upperTick",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "exists",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "pendingSince",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "index",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -1324,6 +1392,11 @@ export const parallaxReactiveAbi = [
     "name": "rulesOf",
     "inputs": [
       {
+        "name": "chainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
         "name": "poolId",
         "type": "bytes32",
         "internalType": "bytes32"
@@ -1337,19 +1410,6 @@ export const parallaxReactiveAbi = [
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "setExecutor",
-    "inputs": [
-      {
-        "name": "executor_",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1402,12 +1462,24 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "event",
-    "name": "ExecutorSet",
+    "name": "ChainAdded",
     "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "poolManager",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
       {
         "name": "executor",
         "type": "address",
-        "indexed": true,
+        "indexed": false,
         "internalType": "address"
       }
     ],
@@ -1417,6 +1489,12 @@ export const parallaxReactiveAbi = [
     "type": "event",
     "name": "MirrorFull",
     "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
       {
         "name": "ruleId",
         "type": "uint256",
@@ -1437,6 +1515,12 @@ export const parallaxReactiveAbi = [
     "name": "PoolUnwatched",
     "inputs": [
       {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "poolId",
         "type": "bytes32",
         "indexed": true,
@@ -1450,6 +1534,12 @@ export const parallaxReactiveAbi = [
     "name": "PoolWatched",
     "inputs": [
       {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "poolId",
         "type": "bytes32",
         "indexed": true,
@@ -1462,6 +1552,12 @@ export const parallaxReactiveAbi = [
     "type": "event",
     "name": "RuleMirrored",
     "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
       {
         "name": "ruleId",
         "type": "uint256",
@@ -1494,6 +1590,12 @@ export const parallaxReactiveAbi = [
     "name": "RuleRearmed",
     "inputs": [
       {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "ruleId",
         "type": "uint256",
         "indexed": true,
@@ -1506,6 +1608,12 @@ export const parallaxReactiveAbi = [
     "type": "event",
     "name": "RuleRemoved",
     "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
       {
         "name": "ruleId",
         "type": "uint256",
@@ -1525,6 +1633,12 @@ export const parallaxReactiveAbi = [
     "type": "event",
     "name": "RuleTriggered",
     "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
       {
         "name": "ruleId",
         "type": "uint256",
@@ -1554,8 +1668,14 @@ export const parallaxReactiveAbi = [
   },
   {
     "type": "error",
-    "name": "ExecutorAlreadySet",
-    "inputs": []
+    "name": "ChainAlreadyAdded",
+    "inputs": [
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

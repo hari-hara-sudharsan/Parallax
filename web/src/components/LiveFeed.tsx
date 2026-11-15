@@ -2,33 +2,34 @@
 
 import { formatUnits } from "viem";
 import { useActivity, type FeedItem } from "@/hooks/useActivity";
-import { LINKS, USDC_DECIMALS, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
+import { CHAINS, LINKS, USDC_DECIMALS, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
 import { fmtToken } from "@/lib/price";
 import { Chip, Panel, TxLink, cx } from "./ui";
 
 /**
- * The hero of the demo: every execution followed across both chains.
- *   ① Origin swap (Unichain, T0) → ② Reactive tx (Lasna) → ③ Callback (Unichain, T1), latency = T1 − T0
+ * The hero of the demo: every execution followed across chains.
+ *   ① Origin swap (Base / Unichain) → ② Reactive tx (Lasna) → ③ Callback (same chain)
+ * Latency comes from the executor's on-chain record: executedBlock − originBlock.
  */
 export function LiveFeed() {
   const { data, isLoading } = useActivity();
 
   return (
     <Panel
-      title="Live activity"
+      title="Live activity · both chains"
       aside={
         <span className="flex items-center gap-1.5 text-[11px] text-faint">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-executed" /> polling both chains
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-executed" /> reading Base, Unichain + Lasna
         </span>
       }
     >
       {isLoading ? (
-        <p className="py-8 text-center text-sm text-faint">Reading Unichain + Lasna…</p>
-      ) : !data?.length ? (
+        <p className="py-8 text-center text-sm text-faint">Reading Base, Unichain and Lasna…</p>
+      ) : !data?.items.length ? (
         <p className="py-8 text-center text-sm text-faint">No executions yet. Arm a rule, then crash the price.</p>
       ) : (
         <ol className="space-y-3">
-          {data.map((it) => (
+          {data.items.map((it) => (
             <Row key={it.key} it={it} />
           ))}
         </ol>
@@ -38,18 +39,16 @@ export function LiveFeed() {
 }
 
 function Row({ it }: { it: FeedItem }) {
+  const c = CHAINS[it.chain];
   const done = it.state === "executed";
-  const latency = it.t0 !== undefined && it.t1 !== undefined ? it.t1 - it.t0 : undefined;
   return (
-    <li
-      className={cx(
-        "animate-slide-in rounded-xl border bg-bg p-4",
-        done ? "border-line" : "border-triggered/40 animate-pulse-ring",
-      )}
-    >
+    <li className={cx("animate-slide-in rounded-xl border bg-bg p-4", done ? "border-line" : "animate-pulse-ring border-triggered/40")}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-line px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">
+              {c.short}
+            </span>
             <span className="num text-xs text-faint">rule #{it.ruleId.toString()}</span>
             {done ? <Chip tone="executed">Executed</Chip> : <Chip tone="triggered" pulse>Reactive fired · executing</Chip>}
           </div>
@@ -57,8 +56,8 @@ function Row({ it }: { it: FeedItem }) {
           <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 text-xs">
             <Step n={1} ok label="Origin swap" />
             <span className="flex flex-wrap items-center gap-x-2">
-              <TxLink href={LINKS.unichainTx(it.originTx)} hash={it.originTx} />
-              <span className="text-faint">Unichain{it.t0 ? ` · ${clock(it.t0)}` : ""}</span>
+              <TxLink href={c.explorerTx(it.originTx)} hash={it.originTx} />
+              <span className="text-faint">{it.originBlock ? `block ${it.originBlock}` : c.short}</span>
             </span>
             <Step n={2} ok={Boolean(it.reactiveTx)} label="Reactive tx" />
             <span className="flex flex-wrap items-center gap-x-2">
@@ -67,8 +66,8 @@ function Row({ it }: { it: FeedItem }) {
             </span>
             <Step n={3} ok={done} label="Callback" />
             <span className="flex flex-wrap items-center gap-x-2">
-              <TxLink href={it.callbackTx ? LINKS.unichainTx(it.callbackTx) : "#"} hash={it.callbackTx} />
-              <span className="text-faint">Unichain{it.t1 ? ` · ${clock(it.t1)}` : ""}</span>
+              <TxLink href={it.callbackTx ? c.explorerTx(it.callbackTx) : "#"} hash={it.callbackTx} />
+              <span className="text-faint">{it.executedBlock ? `block ${it.executedBlock}` : c.short}</span>
             </span>
           </div>
 
@@ -77,10 +76,12 @@ function Row({ it }: { it: FeedItem }) {
 
         <div className="shrink-0 text-right">
           <div className={cx("num text-4xl font-semibold leading-none", done ? "text-executed" : "text-triggered")}>
-            {latency !== undefined ? latency : "…"}
+            {it.latencySeconds !== undefined ? it.latencySeconds.toFixed(1) : "…"}
             <span className="ml-0.5 text-base font-normal text-muted">s</span>
           </div>
-          <div className="mt-1 text-[10px] uppercase tracking-widest text-faint">T1 − T0</div>
+          <div className="num mt-1 text-[10px] uppercase tracking-widest text-faint">
+            {it.latencyBlocks !== undefined ? `${it.latencyBlocks} blocks` : "in flight"}
+          </div>
         </div>
       </div>
     </li>
@@ -111,5 +112,3 @@ function outcome(it: FeedItem) {
   if (weth) parts.push(`${fmtToken(Number(formatUnits(weth, WETH_DECIMALS)), 4)} mWETH`);
   return parts.length ? `Sent to owner: ${parts.join(" + ")}` : "Executed";
 }
-
-const clock = (unix: number) => new Date(unix * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });

@@ -1,11 +1,12 @@
 import { createConfig, http, injected } from "wagmi";
-import { unichainSepolia } from "./chains";
+import { baseSepolia, unichainSepolia } from "./chains";
 
-/** Wallet + RPC config. The app's home chain is Unichain Sepolia (origin + destination). */
+/** Wallet + RPC config: Parallax runs on Base Sepolia and Unichain Sepolia (one reactive contract on Lasna). */
 export const wagmiConfig = createConfig({
-  chains: [unichainSepolia],
+  chains: [baseSepolia, unichainSepolia],
   connectors: [injected()],
   transports: {
+    [baseSepolia.id]: http(process.env.NEXT_PUBLIC_BASE_RPC ?? "https://sepolia.base.org"),
     [unichainSepolia.id]: http(process.env.NEXT_PUBLIC_UNICHAIN_RPC ?? "https://sepolia.unichain.org"),
   },
   ssr: true,

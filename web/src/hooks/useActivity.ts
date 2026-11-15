@@ -1,231 +1,212 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { decodeEventLog, toHex, type Address, type Hex } from "viem";
+import { toHex, type Address, type Hex } from "viem";
 import { parallaxExecutorAbi, parallaxReactiveAbi } from "@/lib/abis";
-import { lasnaClient, unichainClient } from "@/lib/clients";
-import { DEPLOYMENT, LINKS } from "@/lib/deployment";
+import { chainClients, lasnaClient } from "@/lib/clients";
+import { CHAIN_LIST, REACTIVE, type ChainDeployment, type ChainKey } from "@/lib/deployment";
 
 /**
- * One Parallax execution, followed across both chains:
- *   ① origin Swap on Unichain (T0) → ② reactive tx on Lasna → ③ callback tx on Unichain (T1)
- * The origin tx hash is the join key: the reactive contract emits it in RuleTriggered and the
- * executor emits it in RuleExecuted.
+ * One Parallax execution, followed across chains:
+ *   ① origin Swap (Base or Unichain, T0) → ② reactive tx (Lasna) → ③ callback on the same chain (T1)
+ *
+ * No indexer needed: each executor stores an on-chain Execution record
+ * (originTxHash, originBlock, executedBlock, executedAt). From that:
+ *   • latency in blocks = executedBlock − originBlock (exact, for every execution, one multicall)
+ *   • callback tx      = the RuleExecuted log in block `executedBlock` (1-block query)
+ *   • T0               = timestamp of `originBlock`
+ *   • reactive tx      = RuleTriggered(chainId, ruleId) on Lasna (indexed filter)
  */
 export type FeedItem = {
   key: string;
+  chain: ChainKey;
   ruleId: bigint;
+  state: "reacting" | "executed";
   originTx: Hex;
+  originBlock?: number;
   t0?: number;
   reactiveTx?: Hex;
   callbackTx?: Hex;
+  executedBlock?: number;
   t1?: number;
+  latencyBlocks?: number;
+  latencySeconds?: number; // blocks × nominal block time (Base 200 ms, Unichain 1 s)
   owner?: Address;
   amount0Out?: bigint;
   amount1Out?: bigint;
-  tickAfter?: number;
-  state: "reacting" | "executed";
 };
 
-const TAIL_BLOCKS = 300n; // ~5 min on 1 s chains; history beyond that comes from Blockscout
-const HISTORY_MIN_MS = 60_000; //  Blockscout's free tier rate-limits; history changes rarely anyway
-const HISTORY_MAX_MS = 300_000; // back off up to 5 min after a 429
-const STORAGE_KEY = `parallax:history:${DEPLOYMENT.executor.toLowerCase()}`;
+export type ChainStats = { n: number; p50Blocks?: number; p50Seconds?: number; minSeconds?: number };
+export type Activity = { items: FeedItem[]; stats: Record<ChainKey, ChainStats>; last?: FeedItem };
 
-// Module-level caches: enrichment is paid once per origin tx.
-const originTs = new Map<string, number>();
-const reactiveByOrigin = new Map<string, Hex>();
-const executedHistory = new Map<string, FeedItem>(loadStoredHistory());
-let nextHistoryAt = 0;
-let historyBackoff = HISTORY_MIN_MS;
+type ExecRecord = { originTxHash: bigint; originBlock: number; executedBlock: number; executedAt: number };
 
-/** Last good history is kept per browser so a throttled Blockscout never blanks the feed. */
-function loadStoredHistory(): [string, FeedItem][] {
-  try {
-    if (typeof window === "undefined") return [];
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return (JSON.parse(raw) as FeedItem[]).map((it) => {
-      const r = it as unknown as Record<string, string>;
-      return [it.key, { ...it, ruleId: BigInt(r.ruleId), amount0Out: BigInt(r.amount0Out ?? 0), amount1Out: BigInt(r.amount1Out ?? 0) }];
-    });
-  } catch {
-    return [];
-  }
-}
+const ENRICH_NEWEST = 12; // only the newest rows need tx hashes; stats use every record
+const LASNA_TAIL = 300n;
 
-function storeHistory() {
-  try {
-    const plain = [...executedHistory.values()].map((it) => ({
-      ...it,
-      ruleId: it.ruleId.toString(),
-      amount0Out: (it.amount0Out ?? 0n).toString(),
-      amount1Out: (it.amount1Out ?? 0n).toString(),
-    }));
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plain));
-  } catch {
-    /* storage unavailable (private mode etc.): history just isn't cached */
-  }
-}
+// Caches (executed records are final on-chain, so they never need re-reading).
+const finalStatus = new Map<string, number>(); //  chain:ruleId → 2 executed / 3 cancelled
+const records = new Map<string, ExecRecord>();
+const enriched = new Map<string, Partial<FeedItem>>();
+const blockTs = new Map<string, number>();
 
+const k = (c: ChainKey, id: bigint) => `${c}:${id}`;
 const originHex = (x: bigint) => toHex(x, { size: 32 });
 
-async function fetchTriggeredTail() {
-  const latest = await lasnaClient.getBlockNumber();
-  return lasnaClient.getContractEvents({
-    address: DEPLOYMENT.reactive,
-    abi: parallaxReactiveAbi,
-    eventName: "RuleTriggered",
-    fromBlock: latest > TAIL_BLOCKS ? latest - TAIL_BLOCKS : 0n,
-    toBlock: latest,
+async function loadRecords(chain: ChainDeployment) {
+  const client = chainClients[chain.key];
+  const next = await client.readContract({ address: chain.executor, abi: parallaxExecutorAbi, functionName: "nextRuleId" });
+  const open = Array.from({ length: Number(next) - 1 }, (_, i) => BigInt(i + 1)).filter((id) => !finalStatus.has(k(chain.key, id)));
+  if (!open.length) return;
+  const res = await client.multicall({
+    allowFailure: false,
+    contracts: open.flatMap((id) => [
+      { address: chain.executor, abi: parallaxExecutorAbi, functionName: "getRule" as const, args: [id] as const },
+      { address: chain.executor, abi: parallaxExecutorAbi, functionName: "executions" as const, args: [id] as const },
+    ]),
+  });
+  open.forEach((id, i) => {
+    const rule = res[2 * i] as { status: number };
+    const ex = res[2 * i + 1] as readonly [bigint, bigint, bigint, bigint];
+    if (rule.status === 3) finalStatus.set(k(chain.key, id), 3);
+    if (rule.status === 2 && ex[2] > 0n) {
+      finalStatus.set(k(chain.key, id), 2);
+      records.set(k(chain.key, id), {
+        originTxHash: ex[0],
+        originBlock: Number(ex[1]),
+        executedBlock: Number(ex[2]),
+        executedAt: Number(ex[3]),
+      });
+    }
   });
 }
 
-async function fetchExecutedTail() {
-  const latest = await unichainClient.getBlockNumber();
-  return unichainClient.getContractEvents({
-    address: DEPLOYMENT.executor,
-    abi: parallaxExecutorAbi,
-    eventName: "RuleExecuted",
-    fromBlock: latest - TAIL_BLOCKS,
-    toBlock: latest,
-  });
+async function timestampOf(chain: ChainKey, block: number) {
+  const id = `${chain}:${block}`;
+  if (!blockTs.has(id)) blockTs.set(id, Number((await chainClients[chain].getBlock({ blockNumber: BigInt(block) })).timestamp));
+  return blockTs.get(id)!;
 }
 
-/** Full RuleExecuted history from Blockscout (the public RPC caps getLogs at 1,000 blocks). */
-async function fetchExecutedHistory(): Promise<FeedItem[]> {
-  const topic0 = "0xcbeb28ddf63a16f9ba21436a6f32ae913942898c76c4f272a2325b4c5fe7ebaa"; // RuleExecuted
-  const url =
-    `${LINKS.blockscoutApi}?module=logs&action=getLogs&address=${DEPLOYMENT.executor}` +
-    `&topic0=${topic0}&fromBlock=${DEPLOYMENT.executorDeployBlock}&toBlock=latest`;
-  const res = await fetch(url);
-  const json = (await res.json()) as { result?: { data: Hex; topics: (Hex | null)[]; transactionHash: Hex }[] | null };
-  // 429 / errors come back as { status: "0", result: null }; signal the caller to back off.
-  if (res.status === 429 || !Array.isArray(json.result)) throw new Error(`blockscout ${res.status}`);
-  return json.result.map((l) => {
-    const ev = decodeEventLog({
+/** Tx hashes + amounts for one executed rule (once; then cached). */
+async function enrich(chain: ChainDeployment, ruleId: bigint, rec: ExecRecord): Promise<Partial<FeedItem>> {
+  const id = k(chain.key, ruleId);
+  if (enriched.has(id)) return enriched.get(id)!;
+  const out: Partial<FeedItem> = {};
+  try {
+    const [log] = await chainClients[chain.key].getContractEvents({
+      address: chain.executor,
       abi: parallaxExecutorAbi,
       eventName: "RuleExecuted",
-      data: l.data,
-      topics: l.topics.filter(Boolean) as [Hex, ...Hex[]],
+      args: { ruleId },
+      fromBlock: BigInt(rec.executedBlock),
+      toBlock: BigInt(rec.executedBlock),
     });
-    return executedToItem(ev.args, l.transactionHash);
+    if (log) Object.assign(out, { callbackTx: log.transactionHash, owner: log.args.owner, amount0Out: log.args.amount0Out, amount1Out: log.args.amount1Out });
+    out.t0 = await timestampOf(chain.key, rec.originBlock);
+    out.reactiveTx = await findReactiveTx(chain, ruleId, out.t0);
+  } catch {
+    return out; // retried next poll
+  }
+  if (out.callbackTx && out.reactiveTx) enriched.set(id, out);
+  return out;
+}
+
+/** Lasna has no logs API; estimate the Lasna block from T0 (~1 block/s) and search ±300 blocks. */
+async function findReactiveTx(chain: ChainDeployment, ruleId: bigint, t0: number): Promise<Hex | undefined> {
+  const latest = await lasnaClient.getBlock();
+  const est = latest.number - BigInt(Math.max(0, Number(latest.timestamp) - t0));
+  const logs = await lasnaClient.getContractEvents({
+    address: REACTIVE.address,
+    abi: parallaxReactiveAbi,
+    eventName: "RuleTriggered",
+    args: { chainId: BigInt(chain.chainId), ruleId },
+    fromBlock: est - 300n,
+    toBlock: est + 300n > latest.number ? latest.number : est + 300n,
   });
+  return logs.at(-1)?.transactionHash;
 }
 
-type ExecutedArgs = {
-  ruleId: bigint;
-  owner: Address;
-  tick: number;
-  amount0Out: bigint;
-  amount1Out: bigint;
-  originTxHash: bigint;
-  executedAt: bigint;
-};
-
-function executedToItem(a: ExecutedArgs, tx: Hex): FeedItem {
-  const origin = originHex(a.originTxHash);
-  return {
-    key: `${origin}:${a.ruleId}`,
-    ruleId: a.ruleId,
-    originTx: origin,
-    callbackTx: tx,
-    t1: Number(a.executedAt),
-    owner: a.owner,
-    amount0Out: a.amount0Out,
-    amount1Out: a.amount1Out,
-    tickAfter: a.tick,
-    state: "executed",
-  };
+function pct(xs: number[], p: number) {
+  if (!xs.length) return undefined;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1))];
 }
 
-async function originTimestamp(origin: Hex): Promise<number | undefined> {
-  if (originTs.has(origin)) return originTs.get(origin);
-  try {
-    const r = await unichainClient.getTransactionReceipt({ hash: origin });
-    const b = await unichainClient.getBlock({ blockNumber: r.blockNumber });
-    originTs.set(origin, Number(b.timestamp));
-    return Number(b.timestamp);
-  } catch {
-    return undefined;
-  }
-}
+async function loadActivity(): Promise<Activity> {
+  await Promise.allSettled(CHAIN_LIST.map(loadRecords));
 
-/**
- * Lasna has no public logs API, so for executions older than the tail we estimate the Lasna block
- * from the origin timestamp (Lasna makes ~1 block/s) and search a small window around it.
- */
-async function findReactiveTx(origin: Hex, t0: number): Promise<Hex | undefined> {
-  if (reactiveByOrigin.has(origin)) return reactiveByOrigin.get(origin);
-  try {
-    const latest = await lasnaClient.getBlock();
-    const est = latest.number - BigInt(Math.max(0, Number(latest.timestamp) - t0));
-    const logs = await lasnaClient.getContractEvents({
-      address: DEPLOYMENT.reactive,
-      abi: parallaxReactiveAbi,
-      eventName: "RuleTriggered",
-      fromBlock: est - 300n,
-      toBlock: est + 300n > latest.number ? latest.number : est + 300n,
-    });
-    const hit = logs.find((l) => originHex(l.args.originTxHash!) === origin);
-    if (hit) reactiveByOrigin.set(origin, hit.transactionHash);
-    return hit?.transactionHash;
-  } catch {
-    return undefined;
-  }
-}
-
-async function loadFeed(): Promise<FeedItem[]> {
-  const items = new Map<string, FeedItem>();
-
-  // History (Blockscout): at most once a minute, with exponential backoff when throttled.
-  if (Date.now() >= nextHistoryAt) {
-    try {
-      for (const it of await fetchExecutedHistory()) executedHistory.set(it.key, it);
-      storeHistory();
-      historyBackoff = HISTORY_MIN_MS;
-    } catch {
-      historyBackoff = Math.min(historyBackoff * 2, HISTORY_MAX_MS); // live tails still cover new executions
-    }
-    nextHistoryAt = Date.now() + historyBackoff;
-  }
-  for (const [k, v] of executedHistory) items.set(k, { ...v });
-
-  // Live tails from both chains.
-  const [triggered, executed] = await Promise.allSettled([fetchTriggeredTail(), fetchExecutedTail()]);
-  if (executed.status === "fulfilled") {
-    for (const l of executed.value) {
-      const it = executedToItem(l.args as ExecutedArgs, l.transactionHash);
-      items.set(it.key, it);
-      executedHistory.set(it.key, it);
-    }
-    if (executed.value.length) storeHistory();
-  }
-  if (triggered.status === "fulfilled") {
-    for (const l of triggered.value) {
-      const origin = originHex(l.args.originTxHash!);
-      reactiveByOrigin.set(origin, l.transactionHash);
-      const key = `${origin}:${l.args.ruleId}`;
-      if (!items.has(key)) {
-        items.set(key, { key, ruleId: l.args.ruleId!, originTx: origin, reactiveTx: l.transactionHash, state: "reacting" });
-      }
+  // Executed rows (from on-chain records), newest first.
+  const executed: FeedItem[] = [];
+  for (const chain of CHAIN_LIST) {
+    for (const [id, rec] of records) {
+      if (!id.startsWith(`${chain.key}:`)) continue;
+      const blocks = rec.executedBlock - rec.originBlock;
+      executed.push({
+        key: id,
+        chain: chain.key,
+        ruleId: BigInt(id.split(":")[1]),
+        state: "executed",
+        originTx: originHex(rec.originTxHash),
+        originBlock: rec.originBlock,
+        executedBlock: rec.executedBlock,
+        t1: rec.executedAt,
+        latencyBlocks: blocks,
+        latencySeconds: (blocks * chain.blockMs) / 1000,
+      });
     }
   }
+  executed.sort((a, b) => (b.t1 ?? 0) - (a.t1 ?? 0));
 
-  // Enrichment: T0 for everything, reactive tx for history rows.
-  const list = [...items.values()];
+  const stats = Object.fromEntries(
+    CHAIN_LIST.map((c) => {
+      const xs = executed.filter((e) => e.chain === c.key);
+      const b = xs.map((e) => e.latencyBlocks!);
+      const s = xs.map((e) => e.latencySeconds!);
+      return [c.key, { n: xs.length, p50Blocks: pct(b, 50), p50Seconds: pct(s, 50), minSeconds: s.length ? Math.min(...s) : undefined }];
+    }),
+  ) as Record<ChainKey, ChainStats>;
+
+  // Enrich only the newest rows with tx hashes.
+  const newest = executed.slice(0, ENRICH_NEWEST);
   await Promise.all(
-    list.map(async (it) => {
-      it.t0 = await originTimestamp(it.originTx);
-      it.reactiveTx ??= reactiveByOrigin.get(it.originTx);
-      if (!it.reactiveTx && it.t0) it.reactiveTx = await findReactiveTx(it.originTx, it.t0);
+    newest.map(async (it) => {
+      const chain = CHAIN_LIST.find((c) => c.key === it.chain)!;
+      Object.assign(it, await enrich(chain, it.ruleId, records.get(it.key)!));
     }),
   );
 
-  return list.sort((a, b) => (b.t0 ?? b.t1 ?? Infinity) - (a.t0 ?? a.t1 ?? Infinity)).slice(0, 12);
+  // In-flight rows: Lasna fired but the callback hasn't landed yet.
+  const reacting: FeedItem[] = [];
+  try {
+    const latest = await lasnaClient.getBlockNumber();
+    const trig = await lasnaClient.getContractEvents({
+      address: REACTIVE.address,
+      abi: parallaxReactiveAbi,
+      eventName: "RuleTriggered",
+      fromBlock: latest - LASNA_TAIL,
+      toBlock: latest,
+    });
+    for (const l of trig) {
+      const chain = CHAIN_LIST.find((c) => BigInt(c.chainId) === l.args.chainId);
+      if (!chain || finalStatus.has(k(chain.key, l.args.ruleId!))) continue;
+      reacting.push({
+        key: k(chain.key, l.args.ruleId!),
+        chain: chain.key,
+        ruleId: l.args.ruleId!,
+        state: "reacting",
+        originTx: originHex(l.args.originTxHash!),
+        reactiveTx: l.transactionHash,
+      });
+    }
+  } catch {
+    /* Lasna unreachable: executed rows still render */
+  }
+
+  const items = [...new Map([...reacting, ...newest].map((i) => [i.key, i])).values()];
+  return { items, stats, last: newest[0] };
 }
 
-/** Polls every 2.5 s, roughly the time Parallax takes end to end, so rows animate through their states. */
+/** Polls every 2.5 s, about the time Parallax takes end to end, so rows animate through their states. */
 export function useActivity() {
-  return useQuery({ queryKey: ["activity", DEPLOYMENT.executor], queryFn: loadFeed, refetchInterval: 2_500 });
+  return useQuery({ queryKey: ["activity", REACTIVE.address], queryFn: loadActivity, refetchInterval: 2_500 });
 }

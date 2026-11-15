@@ -4,13 +4,13 @@ import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { LiveFeed } from "@/components/LiveFeed";
 import { MyRules } from "@/components/MyRules";
-import { DEPLOYMENT, LINKS } from "@/lib/deployment";
+import { CHAINS, LINKS, REACTIVE } from "@/lib/deployment";
 
 const FLOW = [
-  { n: "1", title: "You arm a rule", body: "Deposit tokens or an LP NFT into ParallaxExecutor on Unichain. It emits RuleCreated." },
-  { n: "2", title: "Reactive mirrors it", body: "ParallaxReactive on Lasna picks up the event and subscribes to that pool's swaps." },
+  { n: "1", title: "You arm a rule", body: "Deposit tokens or an LP NFT into ParallaxExecutor on Base or Unichain. It emits RuleCreated." },
+  { n: "2", title: "Reactive mirrors it", body: "One ParallaxReactive on Lasna guards both chains: it picks up the event and subscribes to that pool's swaps." },
   { n: "3", title: "Price crosses", body: "Any swap that moves the tick past your line reaches react() about a second later." },
-  { n: "4", title: "Callback executes", body: "The executor re-checks the price on-chain, then swaps or withdraws your position." },
+  { n: "4", title: "Callback executes", body: "The executor on the same chain re-checks the price on-chain, swaps or withdraws, and records the latency." },
 ];
 
 export default function Home() {
@@ -47,10 +47,13 @@ export default function Home() {
         <footer className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
           <span>Built for the Reactive Omni Buildathon · Track 1 “Every Second Counts”</span>
           <span className="flex gap-4">
-            <a className="hover:text-muted" href={LINKS.unichainAddress(DEPLOYMENT.executor)} target="_blank" rel="noreferrer">
-              Executor ↗
+            <a className="hover:text-muted" href={CHAINS.base.explorerAddress(CHAINS.base.executor)} target="_blank" rel="noreferrer">
+              Base executor ↗
             </a>
-            <a className="hover:text-muted" href={LINKS.lasnaAddress(DEPLOYMENT.reactive)} target="_blank" rel="noreferrer">
+            <a className="hover:text-muted" href={CHAINS.unichain.explorerAddress(CHAINS.unichain.executor)} target="_blank" rel="noreferrer">
+              Unichain executor ↗
+            </a>
+            <a className="hover:text-muted" href={LINKS.lasnaAddress(REACTIVE.address)} target="_blank" rel="noreferrer">
               Reactive ↗
             </a>
             <a className="hover:text-muted" href={LINKS.repo} target="_blank" rel="noreferrer">

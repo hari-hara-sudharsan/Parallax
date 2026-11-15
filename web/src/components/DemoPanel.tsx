@@ -5,9 +5,9 @@ import { useAccount, useReadContracts } from "wagmi";
 import { useBalances } from "@/hooks/useBalances";
 import { useTxFlow, type Step } from "@/hooks/useTxFlow";
 import { mockErc20Abi, poolSwapTestAbi } from "@/lib/abis";
-import { DEPLOYMENT, LINKS, POOL_KEY, UNICHAIN, USDC_DECIMALS, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
+import { USDC_DECIMALS, WETH_DECIMALS, WETH_IS_CURRENCY0, poolKeyOf } from "@/lib/deployment";
+import { useChain } from "@/hooks/useChain";
 import { fmtToken } from "@/lib/price";
-import { unichainSepolia } from "@/lib/chains";
 import { Button, Panel, TxLink } from "./ui";
 
 // TickMath.MIN_SQRT_PRICE + 1 / MAX_SQRT_PRICE - 1 (v4-core): "no price limit" for a swap.
@@ -22,8 +22,9 @@ const PUMP_USDC = parseUnits("60000", USDC_DECIMALS);
  * Uniswap's PoolSwapTest router to push the price across a rule. Each swap is an ORIGIN event.
  */
 export function DemoPanel() {
+  const { chain } = useChain();
   const { address } = useAccount();
-  const { weth, usdc, refetch } = useBalances(address);
+  const { weth, usdc, refetch } = useBalances(address, chain);
   const faucet = useTxFlow();
   const crash = useTxFlow();
   const pump = useTxFlow();
@@ -32,13 +33,13 @@ export function DemoPanel() {
     allowFailure: false,
     query: { enabled: Boolean(address) },
     contracts: [
-      { address: DEPLOYMENT.mockWETH, abi: mockErc20Abi, functionName: "allowance", args: [address!, UNICHAIN.poolSwapTest], chainId: unichainSepolia.id },
-      { address: DEPLOYMENT.mockUSDC, abi: mockErc20Abi, functionName: "allowance", args: [address!, UNICHAIN.poolSwapTest], chainId: unichainSepolia.id },
+      { address: chain.mockWETH, abi: mockErc20Abi, functionName: "allowance", args: [address!, chain.poolSwapTest], chainId: chain.chainId },
+      { address: chain.mockUSDC, abi: mockErc20Abi, functionName: "allowance", args: [address!, chain.poolSwapTest], chainId: chain.chainId },
     ],
   });
 
   function swapSteps(sellWeth: boolean): Step[] {
-    const token = sellWeth ? DEPLOYMENT.mockWETH : DEPLOYMENT.mockUSDC;
+    const token = sellWeth ? chain.mockWETH : chain.mockUSDC;
     const amount = sellWeth ? CRASH_WETH : PUMP_USDC;
     const allowance = (sellWeth ? allowances?.[0] : allowances?.[1]) ?? 0n;
     const zeroForOne = sellWeth === WETH_IS_CURRENCY0; // selling currency0?
@@ -46,22 +47,22 @@ export function DemoPanel() {
     if (allowance < amount) {
       steps.push({
         label: `Approve ${sellWeth ? "mWETH" : "mUSDC"}`,
-        request: { address: token, abi: mockErc20Abi, functionName: "approve", args: [UNICHAIN.poolSwapTest, amount * 10n], chainId: unichainSepolia.id },
+        request: { address: token, abi: mockErc20Abi, functionName: "approve", args: [chain.poolSwapTest, amount * 10n], chainId: chain.chainId },
       });
     }
     steps.push({
       label: sellWeth ? "Crash the price" : "Pump the price",
       request: {
-        address: UNICHAIN.poolSwapTest,
+        address: chain.poolSwapTest,
         abi: poolSwapTestAbi,
         functionName: "swap",
         args: [
-          POOL_KEY,
+          poolKeyOf(chain),
           { zeroForOne, amountSpecified: -amount, sqrtPriceLimitX96: zeroForOne ? MIN_SQRT : MAX_SQRT },
           { takeClaims: false, settleUsingBurn: false },
           "0x",
         ],
-        chainId: unichainSepolia.id,
+        chainId: chain.chainId,
       },
     });
     return steps;
@@ -87,8 +88,8 @@ export function DemoPanel() {
           disabled={!address || faucet.busy}
           onClick={async () => {
             await faucet.run([
-              { label: "Mint mWETH", request: { address: DEPLOYMENT.mockWETH, abi: mockErc20Abi, functionName: "mint", args: [address!, parseUnits("50", WETH_DECIMALS)], chainId: unichainSepolia.id } },
-              { label: "Mint mUSDC", request: { address: DEPLOYMENT.mockUSDC, abi: mockErc20Abi, functionName: "mint", args: [address!, parseUnits("150000", USDC_DECIMALS)], chainId: unichainSepolia.id } },
+              { label: "Mint mWETH", request: { address: chain.mockWETH, abi: mockErc20Abi, functionName: "mint", args: [address!, parseUnits("50", WETH_DECIMALS)], chainId: chain.chainId } },
+              { label: "Mint mUSDC", request: { address: chain.mockUSDC, abi: mockErc20Abi, functionName: "mint", args: [address!, parseUnits("150000", USDC_DECIMALS)], chainId: chain.chainId } },
             ]);
             after();
           }}
@@ -121,7 +122,7 @@ export function DemoPanel() {
         {[crash, pump].map((f, i) =>
           f.state.status === "done" ? (
             <p key={i} className="text-muted">
-              Origin swap sent <TxLink href={LINKS.unichainTx(f.state.hash)} hash={f.state.hash} />. Watch the feed.
+              Origin swap sent <TxLink href={chain.explorerTx(f.state.hash)} hash={f.state.hash} />. Watch the feed.
             </p>
           ) : f.state.status === "error" ? (
             <p key={i} className="text-danger">{f.state.message}</p>

@@ -5,9 +5,9 @@ import { useAccount } from "wagmi";
 import { useRules, type RuleView } from "@/hooks/useRules";
 import { useTxFlow } from "@/hooks/useTxFlow";
 import { parallaxExecutorAbi } from "@/lib/abis";
-import { DEPLOYMENT, LINKS, WETH_DECIMALS } from "@/lib/deployment";
+import { LINKS, REACTIVE, WETH_DECIMALS } from "@/lib/deployment";
+import { useChain } from "@/hooks/useChain";
 import { boundsToPrices, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
-import { unichainSepolia } from "@/lib/chains";
 import { Button, Chip, Panel } from "./ui";
 
 const TYPE_LABEL = ["Stop-loss", "Take-profit", "Range guard"];
@@ -32,8 +32,9 @@ function describe(r: RuleView): string {
 }
 
 export function MyRules() {
+  const { chain } = useChain();
   const { address } = useAccount();
-  const { data: rules, isLoading } = useRules(address);
+  const { data: rules, isLoading } = useRules(address, chain);
   const flow = useTxFlow();
 
   const active = rules?.filter((r) => r.status === 1).length ?? 0;
@@ -67,7 +68,7 @@ export function MyRules() {
                     flow.run([
                       {
                         label: "Cancel",
-                        request: { address: DEPLOYMENT.executor, abi: parallaxExecutorAbi, functionName: "cancelRule", args: [r.id], chainId: unichainSepolia.id },
+                        request: { address: chain.executor, abi: parallaxExecutorAbi, functionName: "cancelRule", args: [r.id], chainId: chain.chainId },
                       },
                     ])
                   }
@@ -82,11 +83,11 @@ export function MyRules() {
       {flow.state.status === "error" && <p className="mt-3 text-xs text-danger">{flow.state.message}</p>}
       <p className="mt-4 text-[11px] text-faint">
         Rules live in{" "}
-        <a className="underline decoration-line underline-offset-2 hover:text-muted" href={LINKS.unichainAddress(DEPLOYMENT.executor)} target="_blank" rel="noreferrer">
+        <a className="underline decoration-line underline-offset-2 hover:text-muted" href={chain.explorerAddress(chain.executor)} target="_blank" rel="noreferrer">
           ParallaxExecutor
         </a>{" "}
         and are mirrored by{" "}
-        <a className="underline decoration-line underline-offset-2 hover:text-muted" href={LINKS.lasnaAddress(DEPLOYMENT.reactive)} target="_blank" rel="noreferrer">
+        <a className="underline decoration-line underline-offset-2 hover:text-muted" href={LINKS.lasnaAddress(REACTIVE.address)} target="_blank" rel="noreferrer">
           ParallaxReactive
         </a>{" "}
         on Reactive Lasna.

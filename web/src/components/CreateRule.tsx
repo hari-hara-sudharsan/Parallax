@@ -8,10 +8,10 @@ import { usePool } from "@/hooks/usePool";
 import { useTxFlow, type Step } from "@/hooks/useTxFlow";
 import { useBalances } from "@/hooks/useBalances";
 import { mockErc20Abi, positionManagerAbi, parallaxExecutorAbi } from "@/lib/abis";
-import { unichainClient } from "@/lib/clients";
-import { DEPLOYMENT, LINKS, POOL_KEY, UNICHAIN, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
+import { chainClients } from "@/lib/clients";
+import { useChain } from "@/hooks/useChain";
+import { WETH_DECIMALS, WETH_IS_CURRENCY0, poolKeyOf, type ChainDeployment } from "@/lib/deployment";
 import { boundsForPrice, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
-import { unichainSepolia } from "@/lib/chains";
 import { Button, Field, Panel, TxLink, cx, inputClass } from "./ui";
 
 type Tab = "stop" | "take" | "range";
@@ -53,10 +53,11 @@ export function CreateRule() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
+  const { chain } = useChain();
   const isStop = kind === "stop";
   const { address } = useAccount();
-  const { price } = usePool();
-  const { weth } = useBalances(address);
+  const { price } = usePool(chain);
+  const { weth } = useBalances(address, chain);
   const flow = useTxFlow();
 
   const [trigger, setTrigger] = useState("");
@@ -69,11 +70,11 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
   }, [price, trigger, isStop]);
 
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: DEPLOYMENT.mockWETH,
+    address: chain.mockWETH,
     abi: mockErc20Abi,
     functionName: "allowance",
-    args: [address!, DEPLOYMENT.executor],
-    chainId: unichainSepolia.id,
+    args: [address!, chain.executor],
+    chainId: chain.chainId,
     query: { enabled: Boolean(address) },
   });
 
@@ -93,17 +94,17 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
     if ((allowance ?? 0n) < amountIn) {
       steps.push({
         label: "Approve mWETH",
-        request: { address: DEPLOYMENT.mockWETH, abi: mockErc20Abi, functionName: "approve", args: [DEPLOYMENT.executor, amountIn], chainId: unichainSepolia.id },
+        request: { address: chain.mockWETH, abi: mockErc20Abi, functionName: "approve", args: [chain.executor, amountIn], chainId: chain.chainId },
       });
     }
     steps.push({
       label: isStop ? "Arm stop-loss" : "Arm take-profit",
       request: {
-        address: DEPLOYMENT.executor,
+        address: chain.executor,
         abi: parallaxExecutorAbi,
         functionName: "createRule",
-        args: [POOL_KEY, isStop ? 0 : 1, WETH_IS_CURRENCY0, bounds.lower, bounds.upper, amountIn, slippage],
-        chainId: unichainSepolia.id,
+        args: [poolKeyOf(chain), isStop ? 0 : 1, WETH_IS_CURRENCY0, bounds.lower, bounds.upper, amountIn, slippage],
+        chainId: chain.chainId,
       },
     });
     await flow.run(steps);
@@ -194,21 +195,21 @@ function decodeTicks(info: bigint) {
 }
 
 /** Best-effort list of the user's v4 LP NFTs, via Blockscout's ERC-721 transfer index. */
-function useMyPositions(user?: Address) {
+function useMyPositions(chain: ChainDeployment, user?: Address) {
   return useQuery({
-    queryKey: ["positions", user],
+    queryKey: ["positions", chain.key, user],
     enabled: Boolean(user),
     refetchInterval: 15_000,
     queryFn: async () => {
-      const url = `${LINKS.blockscoutApi}?module=account&action=tokennfttx&address=${user}&contractaddress=${UNICHAIN.positionManager}`;
+      const url = `${chain.blockscoutApi}?module=account&action=tokennfttx&address=${user}&contractaddress=${chain.positionManager}`;
       const json = (await (await fetch(url)).json()) as { result?: { tokenID: string }[] };
       const ids = [...new Set((json.result ?? []).map((t) => t.tokenID))].map(BigInt);
       const owned = await Promise.all(
         ids.map(async (id) => {
           try {
             const [owner, liq] = await Promise.all([
-              unichainClient.readContract({ address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "ownerOf", args: [id] }),
-              unichainClient.readContract({ address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "getPositionLiquidity", args: [id] }),
+              chainClients[chain.key].readContract({ address: chain.positionManager, abi: positionManagerAbi, functionName: "ownerOf", args: [id] }),
+              chainClients[chain.key].readContract({ address: chain.positionManager, abi: positionManagerAbi, functionName: "getPositionLiquidity", args: [id] }),
             ]);
             return owner.toLowerCase() === user!.toLowerCase() && liq > 0n ? id : null;
           } catch {
@@ -222,10 +223,11 @@ function useMyPositions(user?: Address) {
 }
 
 function RangeGuardForm() {
+  const { chain } = useChain();
   const { address } = useAccount();
-  const { tick } = usePool();
+  const { tick } = usePool(chain);
   const flow = useTxFlow();
-  const { data: myPositions } = useMyPositions(address);
+  const { data: myPositions } = useMyPositions(chain, address);
   const [idText, setIdText] = useState("");
   const [slippage, setSlippage] = useState(100);
 
@@ -236,19 +238,19 @@ function RangeGuardForm() {
   const positionId = /^\d+$/.test(idText) ? BigInt(idText) : undefined;
 
   const { data: pos } = useQuery({
-    queryKey: ["position", positionId?.toString()],
+    queryKey: ["position", chain.key, positionId?.toString()],
     enabled: positionId !== undefined,
     refetchInterval: 4_000,
     queryFn: async () => {
       const [owner, liquidity, info, approved] = await Promise.all([
-        unichainClient.readContract({ address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "ownerOf", args: [positionId!] }),
-        unichainClient.readContract({ address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "getPositionLiquidity", args: [positionId!] }),
-        unichainClient.readContract({ address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "positionInfo", args: [positionId!] }),
-        unichainClient.readContract({ address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "getApproved", args: [positionId!] }),
+        chainClients[chain.key].readContract({ address: chain.positionManager, abi: positionManagerAbi, functionName: "ownerOf", args: [positionId!] }),
+        chainClients[chain.key].readContract({ address: chain.positionManager, abi: positionManagerAbi, functionName: "getPositionLiquidity", args: [positionId!] }),
+        chainClients[chain.key].readContract({ address: chain.positionManager, abi: positionManagerAbi, functionName: "positionInfo", args: [positionId!] }),
+        chainClients[chain.key].readContract({ address: chain.positionManager, abi: positionManagerAbi, functionName: "getApproved", args: [positionId!] }),
       ]);
       // PositionInfo's top 25 bytes are the first 25 bytes of the poolId.
       const poolPrefix = `0x${info.toString(16).padStart(64, "0").slice(0, 50)}`;
-      return { owner, liquidity, approved, samePool: DEPLOYMENT.poolId.toLowerCase().startsWith(poolPrefix), ...decodeTicks(info) };
+      return { owner, liquidity, approved, samePool: chain.poolId.toLowerCase().startsWith(poolPrefix), ...decodeTicks(info) };
     },
   });
 
@@ -270,15 +272,15 @@ function RangeGuardForm() {
   async function submit() {
     if (positionId === undefined || !pos) return;
     const steps: Step[] = [];
-    if (pos.approved.toLowerCase() !== DEPLOYMENT.executor.toLowerCase()) {
+    if (pos.approved.toLowerCase() !== chain.executor.toLowerCase()) {
       steps.push({
         label: "Approve LP NFT",
-        request: { address: UNICHAIN.positionManager, abi: positionManagerAbi, functionName: "approve", args: [DEPLOYMENT.executor, positionId], chainId: unichainSepolia.id },
+        request: { address: chain.positionManager, abi: positionManagerAbi, functionName: "approve", args: [chain.executor, positionId], chainId: chain.chainId },
       });
     }
     steps.push({
       label: "Arm range guard",
-      request: { address: DEPLOYMENT.executor, abi: parallaxExecutorAbi, functionName: "createRangeGuard", args: [positionId, slippage], chainId: unichainSepolia.id },
+      request: { address: chain.executor, abi: parallaxExecutorAbi, functionName: "createRangeGuard", args: [positionId, slippage], chainId: chain.chainId },
     });
     await flow.run(steps);
   }
@@ -390,6 +392,7 @@ function SubmitRow({
   onClick: () => void;
   flow: ReturnType<typeof useTxFlow>;
 }) {
+  const { chain } = useChain();
   const s = flow.state;
   const pendingLabel = useMemo(
     () => (s.status === "running" ? `${s.step}${s.total > 1 ? ` (${s.index + 1}/${s.total})` : ""}…` : null),
@@ -402,7 +405,7 @@ function SubmitRow({
       </Button>
       {s.status === "done" && (
         <p className="text-xs text-executed">
-          Armed ✓ <TxLink href={LINKS.unichainTx(s.hash)} hash={s.hash} />. Reactive mirrors it within a few seconds.
+          Armed ✓ <TxLink href={chain.explorerTx(s.hash)} hash={s.hash} />. Reactive mirrors it within a few seconds.
         </p>
       )}
       {s.status === "error" && <p className="text-xs text-danger">{s.message}</p>}
