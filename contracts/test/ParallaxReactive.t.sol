@@ -59,7 +59,7 @@ contract ParallaxReactiveTest is Test {
         returns (IReactive.LogRecord memory)
     {
         bytes memory data =
-            abi.encode(RuleType.STOP_LOSS, lowerTick, upperTick, true, uint128(1 ether), uint256(0));
+            abi.encode(RuleType.STOP_LOSS, lowerTick, upperTick, true, uint128(1 ether), uint256(0), int24(0));
         return _log(EXECUTOR, 4, reactive.RULE_CREATED_TOPIC0(), ruleId, uint160(address(this)), uint256(poolId), data);
     }
 
@@ -95,17 +95,19 @@ contract ParallaxReactiveTest is Test {
         assertEq(reactive.RULE_CANCELLED_TOPIC0(), uint256(IParallaxExecutor.RuleCancelled.selector));
         assertEq(reactive.RULE_EXECUTED_TOPIC0(), uint256(IParallaxExecutor.RuleExecuted.selector));
         assertEq(reactive.RULE_SKIPPED_TOPIC0(), uint256(IParallaxExecutor.RuleSkipped.selector));
+        assertEq(reactive.RULE_UPDATED_TOPIC0(), uint256(IParallaxExecutor.RuleUpdated.selector));
         assertEq(reactive.SWAP_TOPIC0(), 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f);
     }
 
     function test_addChain_subscribesToAllRuleEvents() public view {
-        uint256[4] memory topics = [
+        uint256[5] memory topics = [
             reactive.RULE_CREATED_TOPIC0(),
             reactive.RULE_CANCELLED_TOPIC0(),
             reactive.RULE_EXECUTED_TOPIC0(),
-            reactive.RULE_SKIPPED_TOPIC0()
+            reactive.RULE_SKIPPED_TOPIC0(),
+            reactive.RULE_UPDATED_TOPIC0()
         ];
-        for (uint256 i; i < 4; ++i) {
+        for (uint256 i; i < 5; ++i) {
             assertTrue(
                 sys.subscribed(address(reactive), CHAIN, EXECUTOR, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE)
             );
@@ -374,6 +376,86 @@ contract ParallaxReactiveTest is Test {
     function _args(bytes memory payload) internal pure returns (bytes memory out) {
         out = new bytes(payload.length - 4);
         for (uint256 i; i < out.length; ++i) out[i] = payload[i + 4];
+    }
+
+    // ── Trailing stops ───────────────────────────────────────────────────────
+
+    /// @dev Trailing rule as the executor emits it: one bound at (creation tick ∓ trail), trailTicks set.
+    function _trailing(uint256 ruleId, int24 lowerTick, int24 upperTick, int24 trail)
+        internal
+        view
+        returns (IReactive.LogRecord memory)
+    {
+        bytes memory data =
+            abi.encode(RuleType.TRAILING_STOP, lowerTick, upperTick, true, uint128(1 ether), uint256(0), trail);
+        return _log(EXECUTOR, 4, reactive.RULE_CREATED_TOPIC0(), ruleId, uint160(address(this)), uint256(POOL), data);
+    }
+
+    function _ruleUpdated(uint256 ruleId, int24 lowerTick, int24 upperTick) internal view returns (IReactive.LogRecord memory) {
+        return _log(EXECUTOR, 2, reactive.RULE_UPDATED_TOPIC0(), ruleId, 0, 0, abi.encode(lowerTick, upperTick));
+    }
+
+    function test_trailing_raiseRequestedOnlyAfterAStep() public {
+        _react(_trailing(1, -100, NO_UPPER, 100)); // created at tick 0, stop at -100
+        _react(_swap(POOL, 10)); //  candidate -90: only 10 ticks tighter (< 20 step)
+        assertEq(sys.callbackCount(), 0);
+        _react(_swap(POOL, 25)); //  candidate -75: 25 ticks tighter → raise
+        assertEq(sys.callbackCount(), 1);
+        MockSystemContract.CallbackReq memory cb = sys.callbackAt(0);
+        assertEq(cb.recipient, EXECUTOR);
+        assertEq(cb.gasLimit, reactive.RAISE_GAS_LIMIT());
+        assertEq(cb.payload, abi.encodeCall(IParallaxExecutor.raiseTrail, (address(0), uint256(1), int24(25))));
+    }
+
+    function test_trailing_oneRaiseInFlight_thenFollowsExecutorUpdate() public {
+        _react(_trailing(1, -100, NO_UPPER, 100));
+        _react(_swap(POOL, 30));
+        _react(_swap(POOL, 60)); // raise still in flight → no second request
+        assertEq(sys.callbackCount(), 1);
+
+        _react(_ruleUpdated(1, -70, NO_UPPER)); // executor tightened to tick(30) − 100
+        assertEq(reactive.mirror(CHAIN, 1).lowerTick, -70);
+        assertEq(reactive.mirror(CHAIN, 1).raiseSince, 0);
+
+        _react(_swap(POOL, 60)); // candidate -40 ≥ -70 + 20 → next raise
+        assertEq(sys.callbackCount(), 2);
+    }
+
+    function test_trailing_invertedAxis_usesUpperBound() public {
+        _react(_trailing(1, NO_LOWER, 100, 100)); // stop above the tick (token is currency1)
+        _react(_swap(POOL, -10));
+        assertEq(sys.callbackCount(), 0);
+        _react(_swap(POOL, -25)); // candidate 75 ≤ 100 − 20 → raise
+        assertEq(sys.callbackCount(), 1);
+    }
+
+    function test_trailing_firesAtTheRaisedStop() public {
+        _react(_trailing(1, -100, NO_UPPER, 100));
+        _react(_swap(POOL, 30));
+        _react(_ruleUpdated(1, -70, NO_UPPER));
+        _react(_swap(POOL, -75)); // below the raised stop (-70), above the original (-100)
+        assertEq(sys.callbackCount(), 2);
+        assertEq(_first4(sys.callbackAt(1).payload), IParallaxExecutor.execute.selector, "second callback executes");
+    }
+
+    function test_trailing_staleRaiseRetriesAfterTimeout() public {
+        _react(_trailing(1, -100, NO_UPPER, 100));
+        _react(_swap(POOL, 30));
+        vm.warp(block.timestamp + reactive.PENDING_TIMEOUT());
+        _react(_swap(POOL, 30)); // no RuleUpdated came back: retry after the timeout
+        assertEq(sys.callbackCount(), 2);
+    }
+
+    function test_fixedRules_neverRequestRaises() public {
+        _react(_stop(1, POOL, -100));
+        _react(_swap(POOL, 500));
+        assertEq(sys.callbackCount(), 0);
+    }
+
+    function _first4(bytes memory b) internal pure returns (bytes4 out) {
+        assembly {
+            out := mload(add(b, 32))
+        }
     }
 
     // ── Robustness: never revert on unexpected input (reverts are billed) ──

@@ -149,7 +149,7 @@ contract ParallaxForkTest is Test {
         positionId = _mintPositionForAlice(tl, tu, 1e15);
         vm.startPrank(alice);
         IERC721(address(POSM)).approve(address(executor), positionId);
-        ruleId = executor.createRangeGuard(positionId, 100);
+        ruleId = executor.createRangeGuard(positionId, 100, false);
         vm.stopPrank();
     }
 
@@ -510,7 +510,7 @@ contract ParallaxForkTest is Test {
         int24 base = PoolMath.floorToSpacing(_tick(), 60);
         uint256 positionId = _mintPositionForAlice(base - 600, base + 600, 1e15);
         vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.NotPositionOwner.selector, positionId));
-        executor.createRangeGuard(positionId, 100);
+        executor.createRangeGuard(positionId, 100, false);
     }
 
     function test_rangeGuard_rejectsPositionAlreadyOutOfRange() public {
@@ -519,7 +519,7 @@ contract ParallaxForkTest is Test {
         vm.startPrank(alice);
         IERC721(address(POSM)).approve(address(executor), positionId);
         vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.TriggerAlreadyHit.selector, _tick()));
-        executor.createRangeGuard(positionId, 100);
+        executor.createRangeGuard(positionId, 100, false);
         vm.stopPrank();
     }
 
@@ -596,5 +596,225 @@ contract ParallaxForkTest is Test {
         _deliverRecorded(uint256(keccak256("tx:callback")));
         assertEq(reactive.rulesOf(CHAIN, poolId).length, 0, "mirror cleared, pool unwatched");
         id;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Week 2: TRAILING_STOP
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Trailing stop that sells WETH: the stop follows the WETH price up (axis inverted when WETH is currency1).
+    function _createTrailing(int24 trail) internal returns (uint256 id) {
+        vm.prank(alice);
+        id = executor.createTrailingStop(key, wethIs0, wethIs0, trail, 1 ether, 300);
+    }
+
+    function _raiseFromProxy(uint256 ruleId) internal {
+        int24 observed = _tick();
+        vm.prank(CALLBACK_PROXY);
+        executor.raiseTrail(address(reactive), ruleId, observed);
+    }
+
+    /// @dev The trailing stop's active bound, whichever side it is on.
+    function _stopTick(uint256 id) internal view returns (int24) {
+        Rule memory r = executor.getRule(id);
+        return r.lowerTick != NO_LOWER ? r.lowerTick : r.upperTick;
+    }
+
+    function test_trailing_createsStopTrailBehindSpot() public {
+        int24 t = _tick();
+        uint256 id = _createTrailing(200);
+        Rule memory r = executor.getRule(id);
+        assertEq(uint8(r.ruleType), uint8(RuleType.TRAILING_STOP));
+        assertEq(r.trailTicks, 200);
+        assertEq(_stopTick(id), wethIs0 ? t - 200 : t + 200);
+    }
+
+    function test_trailing_raiseFollowsPriceUp_neverLoosens() public {
+        uint256 id = _createTrailing(200);
+        int24 before = _stopTick(id);
+
+        _pump(60_000e6); // WETH price up
+        _raiseFromProxy(id);
+        int24 raised = _stopTick(id);
+        assertEq(raised, wethIs0 ? _tick() - 200 : _tick() + 200, "stop = live tick - trail");
+        assertTrue(wethIs0 ? raised > before : raised < before, "tightened");
+
+        _crash(2 ether); // a little down: raising now would LOOSEN the stop, so it must not move
+        vm.expectEmit(true, false, false, true, address(executor));
+        emit IParallaxExecutor.RuleUpdated(id, executor.getRule(id).lowerTick, executor.getRule(id).upperTick);
+        _raiseFromProxy(id);
+        assertEq(_stopTick(id), raised, "unchanged");
+    }
+
+    function test_trailing_firesAtRaisedLevel() public {
+        uint256 id = _createTrailing(200);
+        _pump(100_000e6);
+        _raiseFromProxy(id);
+        _crash(10 ether); // well past the raised stop
+        assertTrue(executor.isTriggered(id));
+        uint256 usdcBefore = usdc.balanceOf(alice);
+        _callbackFromProxy(id);
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+        assertGt(usdc.balanceOf(alice), usdcBefore);
+    }
+
+    function test_trailing_raiseAuth() public {
+        uint256 id = _createTrailing(200);
+        vm.expectRevert(abi.encodeWithSelector(AbstractPayer.NotAuthorized.selector, address(this), CALLBACK_PROXY));
+        executor.raiseTrail(address(reactive), id, 0);
+        address impostor = makeAddr("impostor");
+        vm.prank(CALLBACK_PROXY);
+        vm.expectRevert(abi.encodeWithSelector(AbstractCallback.CallbackNotAuthorized.selector, impostor, address(reactive)));
+        executor.raiseTrail(impostor, id, 0);
+    }
+
+    function test_trailing_validation() public {
+        int24 t = _tick(); // read first: an external call would consume expectRevert
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.InvalidTrail.selector, int24(5)));
+        executor.createTrailingStop(key, wethIs0, wethIs0, 5, 1 ether, 300);
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.UnsupportedRuleType.selector, RuleType.TRAILING_STOP));
+        executor.createRule(key, RuleType.TRAILING_STOP, wethIs0, t - 100, NO_UPPER, 1 ether, 300);
+        vm.stopPrank();
+    }
+
+    function test_fullLoop_trailingStop() public {
+        vm.recordLogs();
+        uint256 id = _createTrailing(200);
+        _deliverRecorded(1);
+        assertEq(reactive.mirror(CHAIN, id).trailTicks, 200);
+
+        // Price rises: Reactive requests a raise, the executor tightens, the mirror follows.
+        vm.recordLogs();
+        _pump(60_000e6);
+        _deliverRecorded(2);
+        assertEq(sys.callbackCount(), 1, "raise requested");
+        _deliverCallback(0);
+        int24 raised = _stopTick(id);
+        assertEq(
+            wethIs0 ? reactive.mirror(CHAIN, id).lowerTick : reactive.mirror(CHAIN, id).upperTick, raised, "mirror follows"
+        );
+
+        // Price falls through the raised stop: execute.
+        vm.recordLogs();
+        _crash(10 ether);
+        _deliverRecorded(3);
+        assertEq(sys.callbackCount(), 2, "execute requested");
+        _deliverCallback(1);
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+    }
+
+    /// @dev Deliver callback request `i` exactly as Reactive Network would, then feed resulting logs back.
+    function _deliverCallback(uint256 i) internal {
+        MockSystemContract.CallbackReq memory cb = sys.callbackAt(i);
+        bytes memory payload = cb.payload;
+        address injected = address(reactive);
+        assembly {
+            mstore(add(payload, 36), injected)
+        }
+        vm.recordLogs();
+        vm.prank(CALLBACK_PROXY);
+        (bool ok,) = address(executor).call{gas: cb.gasLimit}(payload);
+        assertTrue(ok, "callback ok");
+        _deliverRecorded(uint256(keccak256(abi.encode("cb", i))));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Week 2: RANGE_GUARD with re-centring
+    // ════════════════════════════════════════════════════════════════════════
+
+    function _createRecenterGuard() internal returns (uint256 ruleId, uint256 positionId, int24 tl, int24 tu) {
+        tl = PoolMath.floorToSpacing(_tick(), 60) - 600;
+        tu = PoolMath.floorToSpacing(_tick(), 60) + 600;
+        positionId = _mintPositionForAlice(tl, tu, 1e15);
+        vm.startPrank(alice);
+        IERC721(address(POSM)).approve(address(executor), positionId);
+        ruleId = executor.createRangeGuard(positionId, 300, true);
+        vm.stopPrank();
+    }
+
+    function test_recenter_reopensCentredPosition_andKeepsGuarding() public {
+        (uint256 id, uint256 oldPos, int24 tl, int24 tu) = _createRecenterGuard();
+        _crash(30 ether); // far outside the ±600 range
+
+        uint256 g = gasleft();
+        _callbackFromProxy(id);
+        uint256 used = g - gasleft();
+        emit log_named_uint("recenter execute() gas", used);
+        // The Callback Proxy keeps ~130k of the limit for itself (_extraGas 80k + _maxChargeGas 50k on these chains).
+        assertLt(used, reactive.CALLBACK_GAS_LIMIT() - 130_000, "re-centre fits the callback gas budget");
+
+        // Old rule done, old NFT back to alice (empty).
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+        assertEq(IERC721(address(POSM)).ownerOf(oldPos), alice);
+        assertEq(POSM.getPositionLiquidity(oldPos), 0);
+
+        // New rule guards a new, centred position of the same width.
+        uint256 newId = executor.nextRuleId() - 1;
+        Rule memory n = executor.getRule(newId);
+        assertEq(uint8(n.ruleType), uint8(RuleType.RANGE_GUARD));
+        assertTrue(n.recenter);
+        assertEq(n.owner, alice);
+        assertEq(IERC721(address(POSM)).ownerOf(n.positionId), address(executor));
+        assertGt(POSM.getPositionLiquidity(n.positionId), 0, "liquidity re-deployed");
+        int24 newLower = n.lowerTick + 1;
+        int24 newUpper = n.upperTick;
+        assertEq(newUpper - newLower, tu - tl, "same width");
+        assertTrue(_tick() >= newLower && _tick() < newUpper, "in range again");
+        assertEq(executor.activeRuleCount(poolId), 1);
+    }
+
+    function test_recenter_cancelReturnsTheNewPosition() public {
+        (uint256 id,,,) = _createRecenterGuard();
+        _crash(30 ether);
+        _callbackFromProxy(id);
+        uint256 newId = executor.nextRuleId() - 1;
+        uint256 newPos = executor.getRule(newId).positionId;
+        vm.prank(alice);
+        executor.cancelRule(newId);
+        assertEq(IERC721(address(POSM)).ownerOf(newPos), alice);
+    }
+
+    function test_recenter_stepIsNotCallableFromOutside() public {
+        (uint256 id,,,) = _createRecenterGuard();
+        int24 t = _tick(); // read first: an external call would consume expectRevert
+        vm.expectRevert(ParallaxExecutor.NotSelf.selector);
+        executor.recenterSelf(id, key, t);
+    }
+
+    function test_recenter_inRangeCallbackChangesNothing() public {
+        (uint256 id, uint256 oldPos,,) = _createRecenterGuard();
+        _crash(0.5 ether); // small move, still in range
+        vm.expectEmit(true, false, false, false, address(executor));
+        emit IParallaxExecutor.RuleSkipped(id, SkipReason.CONDITION_NOT_MET, 0, 0);
+        _callbackFromProxy(id);
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.ACTIVE));
+        assertEq(IERC721(address(POSM)).ownerOf(oldPos), address(executor), "position untouched");
+    }
+
+    function test_fullLoop_recenterIsPerpetual() public {
+        vm.recordLogs();
+        (uint256 id,,,) = _createRecenterGuard();
+        _deliverRecorded(1);
+
+        vm.recordLogs();
+        _crash(30 ether);
+        _deliverRecorded(2);
+        assertEq(sys.callbackCount(), 1);
+        _deliverCallback(0); // recenter → new rule mirrored, old removed
+
+        uint256 newId = executor.nextRuleId() - 1;
+        assertTrue(reactive.mirror(CHAIN, newId).exists, "new position mirrored");
+        assertFalse(reactive.mirror(CHAIN, id).exists, "old rule removed");
+        assertEq(reactive.rulesOf(CHAIN, poolId).length, 1, "pool still watched");
+
+        // The market moves again: the new position gets re-centred too.
+        vm.recordLogs();
+        _crash(40 ether);
+        _deliverRecorded(3);
+        assertEq(sys.callbackCount(), 2);
+        _deliverCallback(1);
+        assertEq(uint8(executor.getRule(newId).status), uint8(RuleStatus.EXECUTED));
+        assertTrue(executor.getRule(executor.nextRuleId() - 1).recenter);
     }
 }
