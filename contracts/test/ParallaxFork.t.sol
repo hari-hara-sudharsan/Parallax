@@ -846,4 +846,16 @@ contract ParallaxForkTest is Test {
         (bool ok,) = address(executor).call{gas: budget}(payload);
         assertTrue(ok, "raiseTrail fits the current limit after the proxy reserve");
     }
+
+    /// @dev A pool can be initialised with code-less currency addresses; Solmate's safe transfers would then
+    ///      "succeed" without moving anything, so arming a rule there must be rejected.
+    function test_createRule_rejectsPoolWithCodelessToken() public {
+        address fake = address(uint160(address(weth)) - 1); // sorts before mWETH, has no code
+        (address c0, address c1) = fake < address(usdc) ? (fake, address(usdc)) : (address(usdc), fake);
+        PoolKey memory fakeKey = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
+        PM.initialize(fakeKey, TickMath.getSqrtPriceAtTick(0));
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.TokenHasNoCode.selector, fake));
+        executor.createRule(fakeKey, RuleType.STOP_LOSS, true, -100, NO_UPPER, 1 ether, 300);
+    }
 }

@@ -117,7 +117,7 @@ Full copy-paste guide: **[`docs/setup.md`](docs/setup.md)**. In short:
 
 ```bash
 git clone --recursive https://github.com/hari-hara-sudharsan/Parallax && cd Parallax
-./tw.sh test                       # 74 Foundry tests (unit + fork tests against real Uniswap v4)
+./tw.sh test                       # 75 Foundry tests (unit + fork tests against real Uniswap v4)
 ./tw.sh rehearse                   # free local rehearsal on a fork, no wallet needed
 cp .env.example .env               # add a testnet-only PRIVATE_KEY
 CHAIN=base ./tw.sh demo-pool       # tokens + v4 pool + liquidity

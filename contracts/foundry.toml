@@ -22,3 +22,16 @@ lasna = "${LASNA_RPC}"
 
 [fmt]
 line_length = 120
+
+# Remaining lint categories are deliberate; rationale in docs/architecture.md ("Lint notes").
+[lint]
+exclude_lints = [
+    "block-timestamp",       # timeouts MUST be timestamp-based (Base makes 200 ms blocks)
+    "uninitialized-local",   # `for (uint256 i; …)` relies on the zero default
+    "calls-loop",            # bounded: ≤ 3 callback requests per swap, ≤ 25 rules per pool
+    "reentrancy-events",     # every state-changing executor entrypoint is nonReentrant; reactive only calls SYSTEM
+    "reentrancy-no-eth",     # same as above; effects precede interactions
+    "unsafe-typecast",       # casts are bounded by construction (timestamps → uint64, ticks/amounts in range)
+    "divide-before-multiply", # tick-spacing rounding is intentional (floor to a multiple)
+    "solmate-safe-transfer-lib" # every transferred token is a pool currency checked for code at rule creation
+]

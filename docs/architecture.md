@@ -99,3 +99,20 @@ No indexer: `ParallaxExecutor.executions(ruleId)` gives origin tx + block and ex
 blocks is one multicall for every rule; the callback tx is the `RuleExecuted` log in `executedBlock` (a one-block
 query); the reactive tx is `RuleTriggered(chainId, ruleId)` on Lasna (indexed filter, located from the origin
 timestamp because Lasna has no logs API).
+
+## Lint notes
+
+`forge lint src` is clean. Fixed for real: pools whose currencies have no code are rejected (Solmate's safe transfers
+would otherwise "succeed" silently on such addresses), `settle()`'s credited amount is checked (a fee-on-transfer
+token makes the swap fail cleanly and the rule re-arm), and `nonReentrant` runs first on both callbacks. The categories
+excluded in `contracts/foundry.toml` are deliberate:
+
+| Lint | Why it is intentional |
+|---|---|
+| `block-timestamp` | Every timeout is timestamp-based by requirement (Base makes 200 ms blocks). |
+| `calls-loop` | The reactive loop is bounded: ≤ 25 rules per pool, ≤ 3 callback requests per swap. |
+| `reentrancy-events`, `reentrancy-no-eth` | All state-changing executor entrypoints are `nonReentrant` and apply effects before interactions; the reactive contract only calls the trusted `SYSTEM`. |
+| `unsafe-typecast` | Casts are bounded by construction (timestamps and block numbers to `uint64`, ticks and token amounts within range). |
+| `divide-before-multiply` | Rounding a tick down to the tick spacing is the intended behaviour. |
+| `uninitialized-local` | `for (uint256 i; …)` relies on the zero default. |
+| `solmate-safe-transfer-lib` | Every token the executor transfers is a pool currency that was checked for code at rule creation. |

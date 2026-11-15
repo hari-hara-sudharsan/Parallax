@@ -65,6 +65,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     error NotPoolManager();
     error SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
     error InvalidTrail(int24 trailTicks);
+    error TokenHasNoCode(address token);
+    error SettleMismatch(uint256 paid, uint256 expected);
     error NotSelf();
 
     // ── Constants ───────────────────────────────────────────────────────────
@@ -279,7 +281,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         int24, /* observedTick: informational, we always re-read the tick ourselves */
         uint256 originTxHash,
         uint256 originBlock
-    ) external override onlyServiceProvider onlyCallbackSender(reactiveSender) nonReentrant {
+    ) external override nonReentrant onlyServiceProvider onlyCallbackSender(reactiveSender) {
         Origin memory origin = Origin(originTxHash, originBlock);
         Rule storage r = rules[ruleId];
         PoolKey memory key = _poolKeys[r.poolId];
@@ -318,9 +320,9 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     function raiseTrail(address reactiveSender, uint256 ruleId, int24 /* observedTick */ )
         external
         override
+        nonReentrant
         onlyServiceProvider
         onlyCallbackSender(reactiveSender)
-        nonReentrant
     {
         Rule storage r = rules[ruleId];
         if (r.status != RuleStatus.ACTIVE || r.trailTicks == 0) return;
@@ -366,7 +368,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         // Pay what we owe: sync → transfer → settle.
         POOL_MANAGER.sync(currencyIn);
         ERC20(Currency.unwrap(currencyIn)).safeTransfer(address(POOL_MANAGER), amountInPaid);
-        POOL_MANAGER.settle();
+        uint256 paid = POOL_MANAGER.settle();
+        if (paid != amountInPaid) revert SettleMismatch(paid, amountInPaid);
         // Collect the proceeds straight to the rule owner.
         POOL_MANAGER.take(currencyOut, recipient, amountOut);
 
@@ -601,6 +604,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     function _swapHeld(PoolKey memory key, bool zeroForOne, uint256 amountIn, uint16 slippageBps) internal {
         (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
         uint256 minOut = _quoteAtSpot(amountIn, sqrtP, zeroForOne, key.fee) * (10_000 - slippageBps) / 10_000;
+        // Proceeds stay in this contract and are measured against the baseline, so the result is not needed.
+        // forge-lint: disable-next-line(unused-return)
         POOL_MANAGER.unlock(abi.encode(key, zeroForOne, uint128(amountIn), minOut, address(this)));
     }
 
@@ -705,6 +710,10 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         returns (bytes32 poolId)
     {
         if (key.currency0.isAddressZero()) revert NativeCurrencyNotSupported();
+        // Solmate's SafeTransferLib treats a code-less address as a successful transfer, so a pool
+        // initialised with fake currency addresses could arm a rule without any deposit. Reject it.
+        if (Currency.unwrap(key.currency0).code.length == 0) revert TokenHasNoCode(Currency.unwrap(key.currency0));
+        if (Currency.unwrap(key.currency1).code.length == 0) revert TokenHasNoCode(Currency.unwrap(key.currency1));
         if (LPFeeLibrary.isDynamicFee(key.fee)) revert DynamicFeeNotSupported();
         (uint160 sqrtPriceX96, int24 tick,,) = POOL_MANAGER.getSlot0(key.toId());
         if (sqrtPriceX96 == 0) revert PoolNotInitialized();
