@@ -19,6 +19,8 @@ import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {PositionInfo, PositionInfoLibrary} from "@uniswap/v4-periphery/src/libraries/PositionInfoLibrary.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
@@ -26,6 +28,7 @@ import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 import {IParallaxExecutor} from "./interfaces/IParallaxExecutor.sol";
+import {PoolMath} from "./libraries/PoolMath.sol";
 import {Rule, RuleType, RuleStatus, SkipReason, Origin, Execution, NO_LOWER, NO_UPPER} from "./libraries/RuleTypes.sol";
 
 /// @title ParallaxExecutor
@@ -61,6 +64,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     error EmptyPosition(uint256 positionId);
     error NotPoolManager();
     error SlippageExceeded(uint256 amountOut, uint256 minAmountOut);
+    error InvalidTrail(int24 trailTicks);
+    error NotSelf();
 
     // ── Constants ───────────────────────────────────────────────────────────
     /// @notice Hard cap so the reactive contract's per-event loop stays bounded (it mirrors this cap).
@@ -70,6 +75,12 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     uint16 public constant MAX_SLIPPAGE_BPS = 2000; // 20%
 
     uint256 private constant Q96 = 1 << 96;
+
+    /// @notice Trailing distance bounds (1 tick ≈ 1 bp): 0.1% … 50%.
+    int24 public constant MIN_TRAIL_TICKS = 10;
+    int24 public constant MAX_TRAIL_TICKS = 5000;
+    /// @dev Canonical Permit2 (same address on every chain); PositionManager pulls tokens through it.
+    IAllowanceTransfer internal constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
 
     // ── State ───────────────────────────────────────────────────────────────
     IPoolManager public immutable POOL_MANAGER;
@@ -81,6 +92,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     mapping(uint256 ruleId => Execution) public executions;
     mapping(bytes32 poolId => PoolKey) internal _poolKeys;
     mapping(bytes32 poolId => uint256) public activeRuleCount;
+    /// @dev Tokens already approved ERC20 → Permit2 → PositionManager (for re-centred mints).
+    mapping(address token => bool) internal _permit2Ready;
 
     /// @param callbackProxy_ Reactive Callback Proxy on this chain (Unichain Sepolia: 0x775c…66C1).
     /// @param reactive_ The ParallaxReactive contract on Reactive Network allowed to drive callbacks.
@@ -118,7 +131,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         uint16 maxSlippageBps
     ) external nonReentrant returns (uint256 ruleId) {
         // ── Checks
-        if (ruleType == RuleType.RANGE_GUARD) revert UnsupportedRuleType(ruleType);
+        if (ruleType == RuleType.RANGE_GUARD || ruleType == RuleType.TRAILING_STOP) revert UnsupportedRuleType(ruleType);
         if (amountIn == 0) revert ZeroAmount();
         _checkBounds(lowerTick, upperTick);
         _checkSlippage(maxSlippageBps);
@@ -137,6 +150,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
                 maxSlippageBps: maxSlippageBps,
                 amountIn: amountIn,
                 createdAt: uint64(block.timestamp),
+                trailTicks: 0,
+                recenter: false,
                 poolId: poolId,
                 positionId: 0
             })
@@ -144,7 +159,49 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
 
         // ── Interactions
         ERC20(_inputToken(key, zeroForOne)).safeTransferFrom(msg.sender, address(this), amountIn);
-        emit RuleCreated(ruleId, msg.sender, poolId, ruleType, lowerTick, upperTick, zeroForOne, amountIn, 0);
+        emit RuleCreated(ruleId, msg.sender, poolId, ruleType, lowerTick, upperTick, zeroForOne, amountIn, 0, 0);
+    }
+
+    /// @notice Create a trailing stop: sell when the price falls `trailTicks` (≈ bps) behind the best price
+    ///         seen since creation. The stop starts at (current tick ∓ trailTicks) and only ever tightens:
+    ///         ParallaxReactive asks for raises as the price improves and this contract verifies each one
+    ///         against the live tick (see `raiseTrail`).
+    /// @param stopBelow true = the stop sits below the tick (protects a position whose value rises with the
+    ///        tick); false = above (the price axis is inverted when your token is currency1).
+    function createTrailingStop(
+        PoolKey calldata key,
+        bool zeroForOne,
+        bool stopBelow,
+        int24 trailTicks,
+        uint128 amountIn,
+        uint16 maxSlippageBps
+    ) external nonReentrant returns (uint256 ruleId) {
+        if (amountIn == 0) revert ZeroAmount();
+        if (trailTicks < MIN_TRAIL_TICKS || trailTicks > MAX_TRAIL_TICKS) revert InvalidTrail(trailTicks);
+        _checkSlippage(maxSlippageBps);
+        (, int24 tick,,) = POOL_MANAGER.getSlot0(key.toId());
+        Rule memory r = Rule({
+            owner: msg.sender,
+            ruleType: RuleType.TRAILING_STOP,
+            status: RuleStatus.ACTIVE,
+            zeroForOne: zeroForOne,
+            lowerTick: stopBelow ? tick - trailTicks : NO_LOWER,
+            upperTick: stopBelow ? NO_UPPER : tick + trailTicks,
+            maxSlippageBps: maxSlippageBps,
+            amountIn: amountIn,
+            createdAt: uint64(block.timestamp),
+            trailTicks: trailTicks,
+            recenter: false,
+            poolId: bytes32(0),
+            positionId: 0
+        });
+        r.poolId = _checkPoolAndBounds(key, r.lowerTick, r.upperTick);
+        ruleId = _storeRule(key, r);
+
+        ERC20(_inputToken(key, zeroForOne)).safeTransferFrom(msg.sender, address(this), amountIn);
+        emit RuleCreated(
+            ruleId, msg.sender, r.poolId, RuleType.TRAILING_STOP, r.lowerTick, r.upperTick, zeroForOne, amountIn, 0, trailTicks
+        );
     }
 
     /// @notice Guard a Uniswap v4 LP position: when the pool price leaves the position's range, withdraw
@@ -152,7 +209,13 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     /// @param positionId PositionManager token id (must be yours and currently in range).
     /// @param maxSlippageBps Max shortfall vs. the exact out-of-range amounts (50–2000 bps).
     /// @return ruleId The new rule's id.
-    function createRangeGuard(uint256 positionId, uint16 maxSlippageBps) external nonReentrant returns (uint256 ruleId) {
+    /// @param recenter false = withdraw everything to you when out of range; true = re-open the liquidity as
+    ///        a new position of the same width centred on the current price, and keep guarding it.
+    function createRangeGuard(uint256 positionId, uint16 maxSlippageBps, bool recenter)
+        external
+        nonReentrant
+        returns (uint256 ruleId)
+    {
         // ── Checks
         if (_nft().ownerOf(positionId) != msg.sender) revert NotPositionOwner(positionId);
         if (POSITION_MANAGER.getPositionLiquidity(positionId) == 0) revert EmptyPosition(positionId);
@@ -169,6 +232,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
             maxSlippageBps: maxSlippageBps,
             amountIn: 0,
             createdAt: uint64(block.timestamp),
+            trailTicks: 0,
+            recenter: recenter,
             poolId: bytes32(0),
             positionId: positionId
         });
@@ -179,7 +244,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
 
         // ── Interactions: take custody of the position NFT.
         _nft().transferFrom(msg.sender, address(this), positionId);
-        emit RuleCreated(ruleId, msg.sender, r.poolId, RuleType.RANGE_GUARD, r.lowerTick, r.upperTick, false, 0, positionId);
+        _emitCreated(ruleId, r);
     }
 
     /// @notice Cancel an active rule and get the deposit (or LP position) back.
@@ -235,15 +300,39 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         r.status = RuleStatus.EXECUTED;
         activeRuleCount[r.poolId]--;
 
-        bool ok = r.ruleType == RuleType.RANGE_GUARD
-            ? _withdrawAndReport(ruleId, r, key, tick, origin)
-            : _swapAndReport(ruleId, r, key, sqrtPriceX96, origin);
+        bool ok;
+        if (r.ruleType != RuleType.RANGE_GUARD) ok = _swapAndReport(ruleId, r, key, sqrtPriceX96, origin);
+        else if (r.recenter) ok = _recenterAndReport(ruleId, r, key, tick, origin);
+        else ok = _withdrawAndReport(ruleId, r, key, tick, origin);
 
         if (!ok) {
             r.status = RuleStatus.ACTIVE;
             activeRuleCount[r.poolId]++;
             emit RuleSkipped(ruleId, SkipReason.ACTION_FAILED, tick, originTxHash);
         }
+    }
+
+    /// @inheritdoc IParallaxExecutor
+    /// @dev Same double guard as `execute`. The new bound is computed from the LIVE tick read here, so a
+    ///      raise request can only ever tighten the stop to what the current price justifies.
+    function raiseTrail(address reactiveSender, uint256 ruleId, int24 /* observedTick */ )
+        external
+        override
+        onlyServiceProvider
+        onlyCallbackSender(reactiveSender)
+        nonReentrant
+    {
+        Rule storage r = rules[ruleId];
+        if (r.status != RuleStatus.ACTIVE || r.trailTicks == 0) return;
+        int24 tick = _tick(_poolKeys[r.poolId]);
+        if (r.lowerTick != NO_LOWER) {
+            int24 candidate = tick - r.trailTicks;
+            if (candidate > r.lowerTick) r.lowerTick = candidate;
+        } else {
+            int24 candidate = tick + r.trailTicks;
+            if (candidate < r.upperTick) r.upperTick = candidate;
+        }
+        emit RuleUpdated(ruleId, r.lowerTick, r.upperTick);
     }
 
     /// @notice Uniswap v4 flash-accounting callback: swap, pay the input, send the output to the rule owner.
@@ -356,7 +445,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     {
         address owner_ = r.owner;
         (uint256 bal0, uint256 bal1) = _balances(key, owner_);
-        try POSITION_MANAGER.modifyLiquidities(_withdrawCalldata(r, key, tick), block.timestamp) {
+        try POSITION_MANAGER.modifyLiquidities(_withdrawCalldata(r, key, tick, owner_), block.timestamp) {
             _nft().transferFrom(address(this), owner_, r.positionId); // hand back the now-empty NFT
             (uint256 now0, uint256 now1) = _balances(key, owner_);
             _recordExecution(ruleId, owner_, key, now0 - bal0, now1 - bal1, origin);
@@ -388,14 +477,18 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
 
     /// @dev PositionManager action list: DECREASE_LIQUIDITY (all of it, with slippage minimums), then
     ///      TAKE_PAIR to send both tokens (principal + accrued fees) straight to the owner.
-    function _withdrawCalldata(Rule storage r, PoolKey memory key, int24 tick) internal view returns (bytes memory) {
+    function _withdrawCalldata(Rule storage r, PoolKey memory key, int24 tick, address recipient)
+        internal
+        view
+        returns (bytes memory)
+    {
         (uint128 min0, uint128 min1) = _withdrawMinimums(r, tick);
         bytes memory actions = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY), uint8(Actions.TAKE_PAIR));
         bytes[] memory params = new bytes[](2);
         params[0] = abi.encode(
             r.positionId, uint256(POSITION_MANAGER.getPositionLiquidity(r.positionId)), min0, min1, bytes("")
         );
-        params[1] = abi.encode(key.currency0, key.currency1, r.owner);
+        params[1] = abi.encode(key.currency0, key.currency1, recipient);
         return abi.encode(actions, params);
     }
 
@@ -415,6 +508,181 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         } else {
             min1 = uint128(SqrtPriceMath.getAmount1Delta(sqrtLower, sqrtUpper, liquidity, false) * keep / 10_000);
         }
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Internal: range guard with re-centring
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Runs the whole re-centre atomically through an external self-call so any failure (slippage,
+    ///      mint) reverts every step and the rule simply stays armed.
+    function _recenterAndReport(uint256 ruleId, Rule storage r, PoolKey memory key, int24 tick, Origin memory origin)
+        internal
+        returns (bool)
+    {
+        try this.recenterSelf(ruleId, key, tick) returns (
+            uint256 newRuleId, uint256 newPositionId, int24 tl, int24 tu, uint256 refund0, uint256 refund1
+        ) {
+            _recordExecution(ruleId, r.owner, key, refund0, refund1, origin);
+            emit RuleRecentered(ruleId, newRuleId, newPositionId, tl, tu);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @notice Internal step of a re-centring range guard. Only callable by this contract.
+    /// @dev 1. pull all liquidity + fees here and hand the empty NFT back to the owner;
+    ///      2. pick a new range of the same width centred on the current tick;
+    ///      3. swap to the token ratio that range needs and mint it (held by this contract);
+    ///      4. refund whatever did not fit; 5. guard the new position with a new rule.
+    ///      Balances are measured against a baseline taken first, so other users' deposits are never touched.
+    function recenterSelf(uint256 ruleId, PoolKey memory key, int24 tick)
+        external
+        returns (uint256 newRuleId, uint256 newPositionId, int24 tl, int24 tu, uint256 refund0, uint256 refund1)
+    {
+        if (msg.sender != address(this)) revert NotSelf();
+        Rule storage r = rules[ruleId];
+        (uint256 b0, uint256 b1) = _balances(key, address(this));
+
+        POSITION_MANAGER.modifyLiquidities(_withdrawCalldata(r, key, tick, address(this)), block.timestamp);
+        _nft().transferFrom(address(this), r.owner, r.positionId);
+
+        (tl, tu) = _centredRange(r.lowerTick + 1, r.upperTick, tick, key.tickSpacing);
+        (bool zeroForOne, uint256 amountIn) = _rebalancePlan(key, tl, tu, b0, b1);
+        if (amountIn > 0) _swapHeld(key, zeroForOne, amountIn, r.maxSlippageBps);
+        newPositionId = _mintHeld(key, tl, tu, b0, b1);
+        (refund0, refund1) = _refundAbove(key, b0, b1, r.owner);
+
+        Rule memory next = Rule({
+            owner: r.owner,
+            ruleType: RuleType.RANGE_GUARD,
+            status: RuleStatus.ACTIVE,
+            zeroForOne: false,
+            lowerTick: tl - 1,
+            upperTick: tu,
+            maxSlippageBps: r.maxSlippageBps,
+            amountIn: 0,
+            createdAt: uint64(block.timestamp),
+            trailTicks: 0,
+            recenter: true,
+            poolId: r.poolId,
+            positionId: newPositionId
+        });
+        newRuleId = _storeRule(key, next);
+        _emitCreated(newRuleId, next);
+    }
+
+    /// @dev Same width as the old position, centred on `tick`, aligned to the tick spacing.
+    function _centredRange(int24 oldLower, int24 oldUpper, int24 tick, int24 spacing)
+        internal
+        pure
+        returns (int24 tl, int24 tu)
+    {
+        int24 half = ((oldUpper - oldLower) / 2 / spacing) * spacing;
+        int24 base = PoolMath.floorToSpacing(tick, spacing);
+        if (half == 0) return (base, base + spacing);
+        return (base - half, base + half);
+    }
+
+    /// @dev Plan the rebalancing swap from what we hold above the baseline (direction + exact input).
+    function _rebalancePlan(PoolKey memory key, int24 tl, int24 tu, uint256 b0, uint256 b1)
+        internal
+        view
+        returns (bool zeroForOne, uint256 amountIn)
+    {
+        (uint256 h0, uint256 h1) = _heldAbove(key, b0, b1);
+        (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
+        return _rebalanceAmount(tl, tu, h0, h1, sqrtP);
+    }
+
+    /// @dev Exact-input swap of tokens we hold, with the rule's slippage floor; proceeds stay here.
+    function _swapHeld(PoolKey memory key, bool zeroForOne, uint256 amountIn, uint16 slippageBps) internal {
+        (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
+        uint256 minOut = _quoteAtSpot(amountIn, sqrtP, zeroForOne, key.fee) * (10_000 - slippageBps) / 10_000;
+        POOL_MANAGER.unlock(abi.encode(key, zeroForOne, uint128(amountIn), minOut, address(this)));
+    }
+
+    /// @dev How much to swap, and which way, so holdings (h0, h1) match the ratio the range needs.
+    ///      Everything is valued in currency0 terms: price = (sqrtP / 2^96)^2 currency1 per currency0.
+    function _rebalanceAmount(int24 tl, int24 tu, uint256 h0, uint256 h1, uint160 sqrtP)
+        internal
+        pure
+        returns (bool zeroForOne, uint256 amountIn)
+    {
+        // Token amounts one unit of liquidity needs in the new range at the current price.
+        uint256 u0 = SqrtPriceMath.getAmount0Delta(sqrtP, TickMath.getSqrtPriceAtTick(tu), 1e18, false);
+        uint256 u1in0 =
+            _toToken0(SqrtPriceMath.getAmount1Delta(TickMath.getSqrtPriceAtTick(tl), sqrtP, 1e18, false), sqrtP);
+        uint256 h1in0 = _toToken0(h1, sqrtP);
+        uint256 want1in0 = FullMath.mulDiv(h0 + h1in0, u1in0, u0 + u1in0);
+        zeroForOne = h1in0 < want1in0;
+        amountIn = zeroForOne ? want1in0 - h1in0 : _toToken1(h1in0 - want1in0, sqrtP);
+    }
+
+    /// @dev Mint [tl, tu) with everything held above the baseline; the NFT is held by this contract.
+    function _mintHeld(PoolKey memory key, int24 tl, int24 tu, uint256 b0, uint256 b1) internal returns (uint256 id) {
+        (uint256 h0, uint256 h1) = _heldAbove(key, b0, b1);
+        _ensurePermit2(Currency.unwrap(key.currency0));
+        _ensurePermit2(Currency.unwrap(key.currency1));
+        (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtP, TickMath.getSqrtPriceAtTick(tl), TickMath.getSqrtPriceAtTick(tu), h0, h1
+        );
+        liquidity = liquidity * 9_999 / 10_000; // headroom for the PositionManager's round-up
+
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(key, tl, tu, uint256(liquidity), uint128(h0), uint128(h1), address(this), bytes(""));
+        params[1] = abi.encode(key.currency0, key.currency1);
+        id = POSITION_MANAGER.nextTokenId();
+        POSITION_MANAGER.modifyLiquidities(abi.encode(actions, params), block.timestamp);
+    }
+
+    function _refundAbove(PoolKey memory key, uint256 b0, uint256 b1, address to)
+        internal
+        returns (uint256 r0, uint256 r1)
+    {
+        (r0, r1) = _heldAbove(key, b0, b1);
+        if (r0 > 0) ERC20(Currency.unwrap(key.currency0)).safeTransfer(to, r0);
+        if (r1 > 0) ERC20(Currency.unwrap(key.currency1)).safeTransfer(to, r1);
+    }
+
+    function _heldAbove(PoolKey memory key, uint256 b0, uint256 b1) internal view returns (uint256 h0, uint256 h1) {
+        (uint256 n0, uint256 n1) = _balances(key, address(this));
+        (h0, h1) = (n0 - b0, n1 - b1);
+    }
+
+    /// @dev ERC20 → Permit2 → PositionManager, once per token.
+    function _ensurePermit2(address token) internal {
+        if (_permit2Ready[token]) return;
+        ERC20(token).safeApprove(address(PERMIT2), type(uint256).max);
+        PERMIT2.approve(token, address(POSITION_MANAGER), type(uint160).max, type(uint48).max);
+        _permit2Ready[token] = true;
+    }
+
+    function _toToken0(uint256 amount1, uint160 sqrtP) internal pure returns (uint256) {
+        return FullMath.mulDiv(FullMath.mulDiv(amount1, Q96, sqrtP), Q96, sqrtP);
+    }
+
+    function _toToken1(uint256 amount0, uint160 sqrtP) internal pure returns (uint256) {
+        return FullMath.mulDiv(FullMath.mulDiv(amount0, sqrtP, Q96), sqrtP, Q96);
+    }
+
+    function _emitCreated(uint256 ruleId, Rule memory r) internal {
+        emit RuleCreated(
+            ruleId,
+            r.owner,
+            r.poolId,
+            r.ruleType,
+            r.lowerTick,
+            r.upperTick,
+            r.zeroForOne,
+            r.amountIn,
+            r.positionId,
+            r.trailTicks
+        );
     }
 
     // ════════════════════════════════════════════════════════════════════════

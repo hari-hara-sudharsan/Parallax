@@ -5,12 +5,14 @@ pragma solidity ^0.8.29;
 /// @notice Shared types for Parallax rules (used by the executor, the reactive contract, and tests).
 
 /// @notice What the rule protects. The type is a label for the UI and decides the ACTION:
-///         STOP_LOSS / TAKE_PROFIT swap the deposited tokens; RANGE_GUARD withdraws an LP position.
+///         STOP_LOSS / TAKE_PROFIT / TRAILING_STOP swap the deposited tokens; RANGE_GUARD withdraws an LP
+///         position (and, with `recenter`, re-opens it centred on the new price).
 ///         WHEN a rule fires is decided only by its tick bounds (see `Rule`).
 enum RuleType {
     STOP_LOSS,
     TAKE_PROFIT,
-    RANGE_GUARD
+    RANGE_GUARD,
+    TRAILING_STOP
 }
 
 enum RuleStatus {
@@ -49,6 +51,8 @@ struct Rule {
     uint16 maxSlippageBps;
     uint128 amountIn; //         swap rules: tokens deposited and sold on trigger
     uint64 createdAt; //         block.timestamp
+    int24 trailTicks; //         trailing stop: distance kept behind the best price (0 = fixed bound)
+    bool recenter; //            range guard: re-open a centred position instead of just withdrawing
     bytes32 poolId;
     uint256 positionId; //       range guard: v4 PositionManager NFT id held by the executor
 }

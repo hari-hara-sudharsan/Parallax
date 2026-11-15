@@ -10,7 +10,7 @@ import {RuleType, SkipReason} from "../libraries/RuleTypes.sol";
 interface IParallaxExecutor {
     /// @notice A rule was created (tokens deposited, or LP position NFT handed over).
     /// @dev Log layout (LOG4): topic1 = ruleId, topic2 = owner, topic3 = poolId,
-    ///      data = abi.encode(ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId).
+    ///      data = abi.encode(ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId, trailTicks).
     ///      Fires when tick <= lowerTick || tick >= upperTick (NO_LOWER / NO_UPPER disable a side).
     event RuleCreated(
         uint256 indexed ruleId,
@@ -21,7 +21,17 @@ interface IParallaxExecutor {
         int24 upperTick,
         bool zeroForOne,
         uint128 amountIn,
-        uint256 positionId
+        uint256 positionId,
+        int24 trailTicks
+    );
+
+    /// @notice A trailing stop's bound moved (it only ever tightens). Also emitted unchanged when a raise
+    ///         request didn't qualify, so the reactive side can clear its in-flight flag.
+    event RuleUpdated(uint256 indexed ruleId, int24 lowerTick, int24 upperTick);
+
+    /// @notice A range guard re-opened its liquidity as a new position centred on the price, guarded by a new rule.
+    event RuleRecentered(
+        uint256 indexed oldRuleId, uint256 indexed newRuleId, uint256 newPositionId, int24 tickLower, int24 tickUpper
     );
 
     /// @notice The owner cancelled the rule and got the deposit / position back.
@@ -63,4 +73,8 @@ interface IParallaxExecutor {
         uint256 originTxHash,
         uint256 originBlock
     ) external;
+
+    /// @notice Callback: tighten a trailing stop to (current tick ∓ trailTicks). Verified on-chain: the
+    ///         executor reads the live tick itself, so a stop can never be moved past what the price justifies.
+    function raiseTrail(address reactiveSender, uint256 ruleId, int24 observedTick) external;
 }
