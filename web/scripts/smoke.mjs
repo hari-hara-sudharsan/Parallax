@@ -54,8 +54,17 @@ ok(`Lasna mirror(1) readable (exists=${m[3]})`);
 // 4. Execution history from Blockscout
 const topic0 = "0xcbeb28ddf63a16f9ba21436a6f32ae913942898c76c4f272a2325b4c5fe7ebaa";
 const url = `https://unichain-sepolia.blockscout.com/api?module=logs&action=getLogs&address=${D.executor}&topic0=${topic0}&fromBlock=${D.deployBlock}&toBlock=latest`;
-const { result } = await (await fetch(url)).json();
-Array.isArray(result) && result.length ? ok(`Blockscout returned ${result.length} RuleExecuted log(s)`) : bad("Blockscout history");
+let result = null;
+for (let attempt = 0, wait = 5000; attempt < 4; attempt++, wait *= 2) {
+  const res = await fetch(url);
+  ({ result } = await res.json());
+  if (res.status !== 429) break;
+  console.log(`  … Blockscout rate-limited (429), retrying in ${wait / 1000}s`);
+  await new Promise((r) => setTimeout(r, wait));
+}
+if (Array.isArray(result) && result.length) ok(`Blockscout returned ${result.length} RuleExecuted log(s)`);
+else if (result === null) console.log("! Blockscout rate-limited: history check skipped (the dashboard falls back to cached history + live RPC tails)");
+else bad("Blockscout history");
 
 // 5. For each execution: origin T0, reactive tx via the timestamp-window search, latency
 for (const l of result ?? []) {

@@ -2,12 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { decodeEventLog, toHex, type Address, type Hex } from "viem";
-import { tripwireExecutorAbi, tripwireReactiveAbi } from "@/lib/abis";
+import { parallaxExecutorAbi, parallaxReactiveAbi } from "@/lib/abis";
 import { lasnaClient, unichainClient } from "@/lib/clients";
 import { DEPLOYMENT, LINKS } from "@/lib/deployment";
 
 /**
- * One Tripwire execution, followed across both chains:
+ * One Parallax execution, followed across both chains:
  *   ① origin Swap on Unichain (T0) → ② reactive tx on Lasna → ③ callback tx on Unichain (T1)
  * The origin tx hash is the join key: the reactive contract emits it in RuleTriggered and the
  * executor emits it in RuleExecuted.
@@ -28,13 +28,45 @@ export type FeedItem = {
 };
 
 const TAIL_BLOCKS = 300n; // ~5 min on 1 s chains; history beyond that comes from Blockscout
-const HISTORY_EVERY = 6; //  refresh Blockscout history every 6th poll (~15 s)
+const HISTORY_MIN_MS = 60_000; //  Blockscout's free tier rate-limits; history changes rarely anyway
+const HISTORY_MAX_MS = 300_000; // back off up to 5 min after a 429
+const STORAGE_KEY = `parallax:history:${DEPLOYMENT.executor.toLowerCase()}`;
 
 // Module-level caches: enrichment is paid once per origin tx.
 const originTs = new Map<string, number>();
 const reactiveByOrigin = new Map<string, Hex>();
-const executedHistory = new Map<string, FeedItem>();
-let polls = 0;
+const executedHistory = new Map<string, FeedItem>(loadStoredHistory());
+let nextHistoryAt = 0;
+let historyBackoff = HISTORY_MIN_MS;
+
+/** Last good history is kept per browser so a throttled Blockscout never blanks the feed. */
+function loadStoredHistory(): [string, FeedItem][] {
+  try {
+    if (typeof window === "undefined") return [];
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return (JSON.parse(raw) as FeedItem[]).map((it) => {
+      const r = it as unknown as Record<string, string>;
+      return [it.key, { ...it, ruleId: BigInt(r.ruleId), amount0Out: BigInt(r.amount0Out ?? 0), amount1Out: BigInt(r.amount1Out ?? 0) }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function storeHistory() {
+  try {
+    const plain = [...executedHistory.values()].map((it) => ({
+      ...it,
+      ruleId: it.ruleId.toString(),
+      amount0Out: (it.amount0Out ?? 0n).toString(),
+      amount1Out: (it.amount1Out ?? 0n).toString(),
+    }));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plain));
+  } catch {
+    /* storage unavailable (private mode etc.): history just isn't cached */
+  }
+}
 
 const originHex = (x: bigint) => toHex(x, { size: 32 });
 
@@ -42,7 +74,7 @@ async function fetchTriggeredTail() {
   const latest = await lasnaClient.getBlockNumber();
   return lasnaClient.getContractEvents({
     address: DEPLOYMENT.reactive,
-    abi: tripwireReactiveAbi,
+    abi: parallaxReactiveAbi,
     eventName: "RuleTriggered",
     fromBlock: latest > TAIL_BLOCKS ? latest - TAIL_BLOCKS : 0n,
     toBlock: latest,
@@ -53,7 +85,7 @@ async function fetchExecutedTail() {
   const latest = await unichainClient.getBlockNumber();
   return unichainClient.getContractEvents({
     address: DEPLOYMENT.executor,
-    abi: tripwireExecutorAbi,
+    abi: parallaxExecutorAbi,
     eventName: "RuleExecuted",
     fromBlock: latest - TAIL_BLOCKS,
     toBlock: latest,
@@ -67,11 +99,12 @@ async function fetchExecutedHistory(): Promise<FeedItem[]> {
     `${LINKS.blockscoutApi}?module=logs&action=getLogs&address=${DEPLOYMENT.executor}` +
     `&topic0=${topic0}&fromBlock=${DEPLOYMENT.executorDeployBlock}&toBlock=latest`;
   const res = await fetch(url);
-  const json = (await res.json()) as { result?: { data: Hex; topics: (Hex | null)[]; transactionHash: Hex }[] };
-  if (!Array.isArray(json.result)) return [];
+  const json = (await res.json()) as { result?: { data: Hex; topics: (Hex | null)[]; transactionHash: Hex }[] | null };
+  // 429 / errors come back as { status: "0", result: null }; signal the caller to back off.
+  if (res.status === 429 || !Array.isArray(json.result)) throw new Error(`blockscout ${res.status}`);
   return json.result.map((l) => {
     const ev = decodeEventLog({
-      abi: tripwireExecutorAbi,
+      abi: parallaxExecutorAbi,
       eventName: "RuleExecuted",
       data: l.data,
       topics: l.topics.filter(Boolean) as [Hex, ...Hex[]],
@@ -129,7 +162,7 @@ async function findReactiveTx(origin: Hex, t0: number): Promise<Hex | undefined>
     const est = latest.number - BigInt(Math.max(0, Number(latest.timestamp) - t0));
     const logs = await lasnaClient.getContractEvents({
       address: DEPLOYMENT.reactive,
-      abi: tripwireReactiveAbi,
+      abi: parallaxReactiveAbi,
       eventName: "RuleTriggered",
       fromBlock: est - 300n,
       toBlock: est + 300n > latest.number ? latest.number : est + 300n,
@@ -145,13 +178,16 @@ async function findReactiveTx(origin: Hex, t0: number): Promise<Hex | undefined>
 async function loadFeed(): Promise<FeedItem[]> {
   const items = new Map<string, FeedItem>();
 
-  // History (Blockscout), refreshed occasionally and kept between polls.
-  if (polls++ % HISTORY_EVERY === 0) {
+  // History (Blockscout): at most once a minute, with exponential backoff when throttled.
+  if (Date.now() >= nextHistoryAt) {
     try {
       for (const it of await fetchExecutedHistory()) executedHistory.set(it.key, it);
+      storeHistory();
+      historyBackoff = HISTORY_MIN_MS;
     } catch {
-      /* Blockscout down: the RPC tail still covers live demos */
+      historyBackoff = Math.min(historyBackoff * 2, HISTORY_MAX_MS); // live tails still cover new executions
     }
+    nextHistoryAt = Date.now() + historyBackoff;
   }
   for (const [k, v] of executedHistory) items.set(k, { ...v });
 
@@ -163,6 +199,7 @@ async function loadFeed(): Promise<FeedItem[]> {
       items.set(it.key, it);
       executedHistory.set(it.key, it);
     }
+    if (executed.value.length) storeHistory();
   }
   if (triggered.status === "fulfilled") {
     for (const l of triggered.value) {
@@ -188,7 +225,7 @@ async function loadFeed(): Promise<FeedItem[]> {
   return list.sort((a, b) => (b.t0 ?? b.t1 ?? Infinity) - (a.t0 ?? a.t1 ?? Infinity)).slice(0, 12);
 }
 
-/** Polls every 2.5 s, roughly the time Tripwire takes end to end, so rows animate through their states. */
+/** Polls every 2.5 s, roughly the time Parallax takes end to end, so rows animate through their states. */
 export function useActivity() {
   return useQuery({ queryKey: ["activity", DEPLOYMENT.executor], queryFn: loadFeed, refetchInterval: 2_500 });
 }
