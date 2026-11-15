@@ -75,6 +75,40 @@ export function writeSummary(dir) {
       ),
     );
   }
+  // ── Keeper-bot baseline (bench/keeper.mjs): same pool, same crossing swap, an off-chain bot fills instead.
+  const keeper = readdirSync(dir)
+    .filter((f) => /^keeper-(unichain|base)-.*\.json$/.test(f))
+    .flatMap((f) => JSON.parse(readFileSync(join(dir, f), "utf8")));
+  if (keeper.length) {
+    lines.push(
+      "",
+      "## Parallax vs a keeper bot (same pool, same crossing swap)",
+      "",
+      "`bench/keeper.mjs` runs a classic off-chain bot: it polls the pool every 250 ms over the public RPC and sends its",
+      "own market sell when the stop is crossed. This is a *good* bot (fast polling, warm connection, funded hot key);",
+      "real keepers also carry downtime, gas-spike and skipped-order risk that this benchmark does not model.",
+      "",
+      "| Chain | Executor | Rounds | Filled | Blocks p50 / p90 / min / max | Seconds by blocks p50 |",
+      "|---|---|---|---|---|---|",
+    );
+    for (const chain of ["base", "unichain"]) {
+      const ms = chain === "base" ? 200 : 1000;
+      const groups = [
+        ["Parallax (on-chain, no bot)", rows.filter((r) => r.chain === chain)],
+        ["Keeper bot (off-chain)", keeper.filter((r) => r.chain === chain)],
+      ];
+      for (const [label, rs] of groups) {
+        if (!rs.length) continue;
+        const b = rs.filter((r) => r.ok).map((r) => r.latencyBlocks);
+        lines.push(
+          `| ${chain === "base" ? "Base Sepolia" : "Unichain Sepolia"} | ${label} | ${rs.length} | ${b.length}/${rs.length} | ` +
+            `${pct(b, 50) ?? "–"} / ${pct(b, 90) ?? "–"} / ${b.length ? Math.min(...b) : "–"} / ${b.length ? Math.max(...b) : "–"} | ` +
+            `${b.length ? ((pct(b, 50) * ms) / 1000).toFixed(1) + " s" : "–"} |`,
+        );
+      }
+    }
+  }
+
   writeFileSync(join(dir, "SUMMARY.md"), lines.join("\n") + "\n");
 }
 
