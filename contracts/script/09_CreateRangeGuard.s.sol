@@ -19,7 +19,8 @@ import {IERC721} from "forge-std/interfaces/IERC721.sol";
 ///         and hand it to Parallax as a RANGE_GUARD. When the price leaves the range, the position's
 ///         liquidity + fees are withdrawn back to you automatically.
 ///         To guard an existing position instead, set RG_POSITION_ID.
-/// Run: ./tw.sh create-range-guard
+///      RG_RECENTER=true re-opens the liquidity centred on the new price instead of withdrawing it.
+/// Run: ./tw.sh create-range-guard   /   ./tw.sh create-recenter-guard
 contract CreateRangeGuard is DemoBase {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
@@ -33,7 +34,9 @@ contract CreateRangeGuard is DemoBase {
         vm.startBroadcast(pk);
         if (positionId == 0) positionId = _mintNarrowPosition(posm, me);
         IERC721(address(posm)).approve(address(executor), positionId);
-        uint256 ruleId = executor.createRangeGuard(positionId, uint16(vm.envOr("RG_SLIPPAGE_BPS", uint256(100))));
+        uint256 ruleId = executor.createRangeGuard(
+            positionId, uint16(vm.envOr("RG_SLIPPAGE_BPS", uint256(300))), vm.envOr("RG_RECENTER", false)
+        );
         vm.stopBroadcast();
 
         console2.log("RANGE_GUARD ruleId:", ruleId);

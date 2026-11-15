@@ -72,6 +72,8 @@ case "$cmd" in
   create-stop-loss)   RULE_KIND=stop-loss   chain_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
   create-take-profit) RULE_KIND=take-profit chain_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
   create-range-guard) chain_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
+  create-recenter-guard) RG_RECENTER=true chain_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
+  create-trailing-stop)  chain_script script/10_CreateTrailingStop.s.sol:CreateTrailingStop ;;
 
   # Top-ups, credited to reserves via depositTo (the docs' recommended route).
   fund-reactive)    # ./tw.sh fund-reactive 1ether
@@ -107,6 +109,10 @@ case "$cmd" in
   bench)            # CHAIN=base ./tw.sh bench 30   → N automated live rounds, writes results/
     (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
     (cd "$ROOT/bench" && CHAIN="$SEL" node bench.mjs "${1:-10}") ;;
+
+  keeper)           # CHAIN=base ./tw.sh keeper 20  → off-chain keeper-bot baseline on the same pool
+    (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
+    (cd "$ROOT/bench" && CHAIN="$SEL" node keeper.mjs "${1:-10}") ;;
 
   abis)             # regenerate the frontend's typed ABIs from Foundry artifacts
     (cd "$ROOT/contracts" && forge build >/dev/null 2>&1) && python "$ROOT/web/scripts/gen-abis.py" "$ROOT" ;;
@@ -184,9 +190,11 @@ Parallax
   deploy-parallax     one ParallaxReactive (Lasna) + an executor on Unichain AND Base, linked with addChain
   deploy-reactive | deploy-executor | add-chain     the individual steps
   create-stop-loss | create-take-profit | create-range-guard
+  create-trailing-stop (TRAIL_BPS)  |  create-recenter-guard (LP guard that re-centres instead of withdrawing)
   fund-reactive [amt] / fund-executor [amt]         top up lREACT / callback ETH
   debts               balances, reserves, debt
   rule <id>           a rule's status + its on-chain execution record
+  keeper <N>          off-chain keeper-bot baseline on the same pool (for comparison)
   bench <N>           N automated live rounds → results/<chain>-<date>.json + results/SUMMARY.md
   abis                regenerate web/src/lib/generated/abis.ts
   callbacks <tx>      Lasna getCallbacks for a reactive tx
