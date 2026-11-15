@@ -325,10 +325,10 @@ function Showcase() {
 
       {/* The real segmented control, built in em and enlarged to poster size; it works. */}
       <div data-ui className="absolute bottom-[14svh] left-5 right-5 flex justify-center text-[clamp(22px,6.4vw,40px)] leading-none md:bottom-[16vh] md:left-auto md:right-10 md:block md:text-[clamp(36px,5vw,80px)]">
-        <div role="radiogroup" aria-label="Protect against" className="relative inline-flex items-stretch rounded-full bg-black/90 p-[0.12em]">
+        <div role="radiogroup" aria-label="Protect against" className="relative inline-grid grid-cols-[1fr_1fr] rounded-full bg-black/90 p-[0.12em]">
           <span
             aria-hidden
-            className="m-slide absolute bottom-[0.12em] top-[0.12em] w-[calc(50%-0.12em)] rounded-full bg-[#4a4a4f]"
+            className="m-slide absolute bottom-[0.12em] left-[0.12em] top-[0.12em] w-[calc(50%-0.12em)] rounded-full bg-[#4a4a4f]"
             style={{ transform: take ? "translateX(100%)" : "translateX(0)" }}
           />
           {(["stop", "take"] as const).map((m) => (
@@ -338,7 +338,7 @@ function Showcase() {
               role="radio"
               aria-checked={mode === m}
               onClick={() => setMode(m)}
-              className={cx("relative z-10 w-[5.6em] whitespace-nowrap rounded-full px-[0.6em] py-[0.32em] font-semibold leading-[1.1] tracking-[-0.03em] transition-colors", mode === m ? "text-ink" : "text-muted hover:text-ink")}
+              className={cx("relative z-10 whitespace-nowrap rounded-full px-[0.7em] py-[0.32em] text-center font-semibold leading-[1.1] tracking-[-0.03em] transition-colors", mode === m ? "text-ink" : "text-muted hover:text-ink")}
             >
               {m === "stop" ? "Stop-loss" : "Take-profit"}
             </button>
@@ -391,11 +391,13 @@ function Proof() {
 
 function Tile({ className, caption, line, children, i }: { className: string; caption: string; line: string; children: ReactNode; i: number }) {
   return (
-    <div data-reveal style={S(i)} className={cx("relative overflow-hidden rounded-[20px]", className)}>
-      <div data-ui className="absolute inset-0 p-5">{children}</div>
-      <div className="absolute bottom-5 left-5 right-5">
-        <div className="text-[18px] font-medium">{caption}</div>
-        <div className="mt-0.5 text-[15px] text-muted">{line}</div>
+    <div data-ui data-reveal style={S(i)} className={cx("flex flex-col overflow-hidden rounded-[20px] p-5 md:p-6", className)}>
+      <div className="flex min-h-0 flex-1 items-center justify-center py-2">
+        {children}
+      </div>
+      <div>
+        <div className="text-[18px] font-medium leading-6">{caption}</div>
+        <div className="mt-0.5 text-[15px] leading-5 text-muted">{line}</div>
       </div>
     </div>
   );
@@ -414,13 +416,13 @@ function Features() {
           <span className="inline-block rounded-full bg-active/15 px-[0.5em] py-[0.15em] text-[32px] font-semibold leading-[1.15] text-active md:text-[44px]">−2%</span>
         </Tile>
         <Tile i={2} className="row-span-2 bg-panel md:col-span-3 md:row-span-2" caption="Range guard" line="Re-centres your LP">
-          <span className="relative mt-6 block h-[10px] w-[115%] rounded-full bg-raised">
+          <span className="relative block h-[10px] w-full max-w-[260px] rounded-full bg-raised">
             <span className="absolute left-[14%] right-[22%] h-[10px] rounded-full bg-active" />
             <span className="absolute left-[44%] top-[-14px] h-[38px] w-[3px] rounded bg-ink" />
           </span>
         </Tile>
         <Tile i={3} className="col-span-2 row-span-3 bg-panel md:col-span-6 md:row-span-4" caption="Stop-loss" line="Drag the line; that is the whole setup">
-          <span className="mt-16 block w-[150%] text-[64px]">
+          <span className="block w-full max-w-[520px] px-[0.45em] text-[48px] md:text-[64px]">
             <span className="relative block h-[0.16em] rounded-full bg-raised">
               <span className="absolute inset-y-0 left-0 w-[46%] rounded-full bg-active" />
               <span className="absolute left-[46%] top-1/2 h-[0.9em] w-[0.9em] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-[0.08em] ring-black/30" />
@@ -428,7 +430,7 @@ function Features() {
           </span>
         </Tile>
         <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-4" caption="Re-checked on‑chain" line="Nothing executes on stale data">
-          <span className="mt-1 inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[24px] font-semibold leading-[1.15] text-executed md:text-[30px] lg:text-[44px]">Executed</span>
+          <span className="inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[24px] font-semibold leading-[1.15] text-executed md:text-[30px] lg:text-[44px]">Executed</span>
         </Tile>
         <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-4" caption="About a second" line="Swap to execution on Base">
           <span className="num block text-[72px] font-bold leading-none tracking-[-0.05em] md:text-[110px]">1.6</span>
