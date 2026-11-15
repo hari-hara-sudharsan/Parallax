@@ -13,7 +13,7 @@ optimizer_runs = 200
 via_ir = false
 
 # Scripts read .env values and write deployment JSON.
-fs_permissions = [{ access = "read-write", path = "./deployments" }]
+fs_permissions = [{ access = "read-write", path = "./deployments" }, { access = "read-write", path = "../results" }]
 
 [rpc_endpoints]
 unichain_sepolia = "${UNICHAIN_SEPOLIA_RPC}"

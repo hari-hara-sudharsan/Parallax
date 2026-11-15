@@ -17,6 +17,10 @@ import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/Pool
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "@uniswap/v4-core/src/test/PoolModifyLiquidityTest.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
+import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 import {ParallaxVault} from "../src/ParallaxVault.sol";
 import {ParallaxVaultReactive} from "../src/ParallaxVaultReactive.sol";
@@ -389,5 +393,137 @@ contract ParallaxVaultTest is Test {
         _swap(true, 0.5 ether);
         _deliver();
         assertEq(sys.callbackCount() - before, 2);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Simulation: the same deposit as a passive LP vs in ParallaxVault, over one scripted price path
+    //  (drift up → chop → crash → calm → partial recovery). Writes results/vault-sim.json.
+    // ════════════════════════════════════════════════════════════════════════
+
+    address passive = makeAddr("passive");
+    IAllowanceTransfer constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
+    uint256 constant SIM_STEPS = 30;
+    uint256 constant STEP_SECONDS = 30;
+
+    /// @dev Value of (weth, usdc) in USDC (6 dp) at the live pool price.
+    function _usdcValue(uint256 w, uint256 u) internal view returns (uint256) {
+        (uint160 sqrtP,,,) = PM.getSlot0(key.toId());
+        uint256 p2 = FullMath.mulDiv(sqrtP, sqrtP, 1 << 64); // sqrtP^2 / 2^64
+        uint256 wInUsdc = wethIs0 ? FullMath.mulDiv(w, p2, 1 << 128) : FullMath.mulDiv(w, 1 << 128, p2);
+        return u + wInUsdc;
+    }
+
+    function _mintPassive(int24 tl, int24 tu, uint256 w, uint256 u) internal returns (uint256 id) {
+        weth.mint(passive, w);
+        usdc.mint(passive, u);
+        (uint256 a0, uint256 a1) = wethIs0 ? (w, u) : (u, w);
+        (uint160 sqrtP,,,) = PM.getSlot0(key.toId());
+        uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtP, TickMath.getSqrtPriceAtTick(tl), TickMath.getSqrtPriceAtTick(tu), a0, a1
+        ) * 9_999 / 10_000;
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(key, tl, tu, uint256(liq), uint128(a0), uint128(a1), passive, bytes(""));
+        params[1] = abi.encode(key.currency0, key.currency1);
+        vm.startPrank(passive);
+        weth.approve(address(PERMIT2), type(uint256).max);
+        usdc.approve(address(PERMIT2), type(uint256).max);
+        PERMIT2.approve(address(weth), address(POSM), type(uint160).max, uint48(block.timestamp + 30 days));
+        PERMIT2.approve(address(usdc), address(POSM), type(uint160).max, uint48(block.timestamp + 30 days));
+        id = POSM.nextTokenId();
+        POSM.modifyLiquidities(abi.encode(actions, params), block.timestamp + 60);
+        vm.stopPrank();
+    }
+
+    /// @dev Close the passive position (liquidity + fees); its total value in USDC including leftovers.
+    function _closePassive(uint256 id) internal returns (uint256) {
+        bytes memory actions = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY), uint8(Actions.TAKE_PAIR));
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(id, uint256(POSM.getPositionLiquidity(id)), uint128(0), uint128(0), bytes(""));
+        params[1] = abi.encode(key.currency0, key.currency1, passive);
+        vm.prank(passive);
+        POSM.modifyLiquidities(abi.encode(actions, params), block.timestamp + 60);
+        return _usdcValue(weth.balanceOf(passive), usdc.balanceOf(passive));
+    }
+
+    /// @dev Step i of the scripted path: (sell WETH?, amount, phase name).
+    function _pathStep(uint256 i) internal pure returns (bool sellWeth, uint256 amount, string memory phase) {
+        if (i < 8) return (false, 1_400e6, "drift up");
+        if (i < 14) return (i % 2 == 0, i % 2 == 0 ? 0.3 ether : 900e6, "chop");
+        if (i == 14) return (true, 14 ether, "crash");
+        if (i < 22) return (i % 2 == 0, i % 2 == 0 ? 0.1 ether : 300e6, "calm");
+        return (false, 2_000e6, "recovery");
+    }
+
+    function _row(uint256 i, string memory phase, int24 t, bool v, bool p) internal view returns (string memory) {
+        return string.concat(
+            i == 0 ? "" : ",",
+            '{"step":', vm.toString(i), ',"phase":"', phase, '","tick":', vm.toString(int256(t)),
+            ',"vaultMode":', vm.toString(uint256(uint8(vault.mode()))),
+            ',"vaultInRange":', v ? "true" : "false", ',"passiveInRange":', p ? "true" : "false", "}"
+        );
+    }
+
+    uint256 internal simVaultIn;
+    uint256 internal simPassiveIn;
+    string internal simRows;
+
+    function test_sim_vaultVsPassiveLP() public {
+        (uint256 W, uint256 U) = (1 ether, 3000e6);
+        vm.recordLogs();
+        _deposit(alice, W, U);
+        _deliver();
+        (int24 pl, int24 pu) = (vault.tickLower(), vault.tickUpper());
+        uint256 pid = _mintPassive(pl, pu, W, U); // same capital, same starting range, never managed
+
+        simRows = "[";
+        for (uint256 i; i < SIM_STEPS; ++i) {
+            vm.warp(block.timestamp + STEP_SECONDS);
+            (bool s, uint256 a, string memory phase) = _pathStep(i);
+            _swapAndLoop(s, a);
+            int24 t = _tick();
+            bool v = vault.inRange();
+            bool p = t >= pl && t < pu;
+            if (v) ++simVaultIn;
+            if (p) ++simPassiveIn;
+            simRows = string.concat(simRows, _row(i, phase, t, v, p));
+        }
+        simRows = string.concat(simRows, "]");
+
+        uint256 hodl = _usdcValue(W, U);
+        uint256 aliceShares = vault.balanceOf(alice); // read BEFORE prank (an external call consumes it)
+        vm.prank(alice);
+        (uint256 o0, uint256 o1) = vault.withdraw(aliceShares);
+        uint256 vaultValue = wethIs0 ? _usdcValue(o0, o1) : _usdcValue(o1, o0);
+        uint256 passiveValue = _closePassive(pid);
+        _writeSim(vaultValue, passiveValue, hodl);
+
+        emit log_named_uint("vault time in range %", simVaultIn * 100 / SIM_STEPS);
+        emit log_named_uint("passive time in range %", simPassiveIn * 100 / SIM_STEPS);
+        emit log_named_uint("vault final (USDC 6dp)", vaultValue);
+        emit log_named_uint("passive final (USDC 6dp)", passiveValue);
+        emit log_named_uint("hodl final (USDC 6dp)", hodl);
+        emit log_named_uint("rebalances", vault.rebalances());
+        emit log_named_uint("evacuations", vault.evacuations());
+        emit log_named_uint("reentries", vault.reentries());
+        assertGt(simVaultIn, simPassiveIn, "vault should spend more time in range");
+    }
+
+    function _writeSim(uint256 vaultValue, uint256 passiveValue, uint256 hodl) internal {
+        string memory head = string.concat(
+            '{"steps":', vm.toString(SIM_STEPS), ',"stepSeconds":', vm.toString(STEP_SECONDS),
+            ',"halfWidthTicks":', vm.toString(int256(HALF_WIDTH)), ',"breakerTicks":', vm.toString(int256(BREAKER)),
+            ',"calmSeconds":', vm.toString(uint256(CALM)),
+            ',"vaultTimeInRangePct":', vm.toString(simVaultIn * 100 / SIM_STEPS),
+            ',"passiveTimeInRangePct":', vm.toString(simPassiveIn * 100 / SIM_STEPS)
+        );
+        string memory tail = string.concat(
+            ',"rebalances":', vm.toString(uint256(vault.rebalances())),
+            ',"evacuations":', vm.toString(uint256(vault.evacuations())),
+            ',"reentries":', vm.toString(uint256(vault.reentries())),
+            ',"finalValueUsdc6":{"vault":', vm.toString(vaultValue), ',"passive":', vm.toString(passiveValue),
+            ',"hodl":', vm.toString(hodl), '},"path":', simRows, "}"
+        );
+        vm.writeFile(string.concat(vm.projectRoot(), "/../results/vault-sim.json"), string.concat(head, tail));
     }
 }
