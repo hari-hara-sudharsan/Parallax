@@ -11,6 +11,7 @@ calls back and executes, with no bot and no server. One reactive contract guards
 | **Live result** | **44 / 44** live rounds filled · **Base median 7 blocks ≈ 1.4 s** origin swap → execution (p90 2.0 s, fastest 1.0 s) |
 | **vs a keeper bot** | Same pool, same crossing swap: a 250 ms-polling bot fills at a median of **10 blocks ≈ 2.0 s** |
 | **Real DeFi, not a mock** | Official Uniswap v4 `PoolManager` / `PositionManager` on both chains |
+| **Live dashboard** | **[hari-hara-sudharsan.github.io/Parallax](https://hari-hara-sudharsan.github.io/Parallax/)** (static site; connect MetaMask on Base Sepolia) |
 | **Proof** | Every origin, reactive and callback tx: [`results/SUMMARY.md`](results/SUMMARY.md) · addresses: [`deployments/addresses.md`](deployments/addresses.md) |
 
 ---
