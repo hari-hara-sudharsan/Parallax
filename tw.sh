@@ -113,6 +113,9 @@ for l in json.load(sys.stdin):
     done <<< "$EX"
     if [[ -z "$EX" ]]; then echo "callback (not found yet: try again in a few seconds)"; fi ;;
 
+  abis)             # regenerate the frontend's typed ABIs from Foundry artifacts
+    (cd "$ROOT/contracts" && forge build >/dev/null 2>&1) && python "$ROOT/web/scripts/gen-abis.py" "$ROOT" ;;
+
   callbacks)        # ./tw.sh callbacks <reactiveTxHash>  → destination tx hash(es) for a reactive tx
     cast call "$SYSTEM_CONTRACT" "getCallbacks(uint256)((uint256,address,uint256,uint256,uint256,bytes)[])" \
       "$(cast to-dec "${1:?reactive tx hash}")" --rpc-url "$LASNA_RPC" ;;
@@ -194,6 +197,7 @@ Core loop (Phase 2):
   fund-executor [amt]   top up TripwireExecutor callback reserves (ETH)
   debts             balances / reserves / debt on both sides
   rule <id>         on-chain status of a rule
+  abis              regenerate web/src/lib/generated/abis.ts from contracts
   proof <originTx>  origin → reactive → callback tx + latency for one run (proof table row)
   callbacks <tx>    destination tx hash for a Lasna reactive tx
 EOF
