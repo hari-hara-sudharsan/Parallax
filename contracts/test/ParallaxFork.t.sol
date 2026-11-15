@@ -45,6 +45,9 @@ contract ParallaxForkTest is Test {
     IPositionManager constant POSM = IPositionManager(0xf969Aee60879C54bAAed9F3eD26147Db216Fd664);
     IAllowanceTransfer constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     address constant CALLBACK_PROXY = 0x775c9B990ADe401060B78D0e98684eEf8d2466C1;
+    /// @dev Gas the Callback Proxy keeps from every callback limit. Measured live on Base Sepolia: a 200k limit
+    ///      forwarded 24,023 gas to the target (replay of tx 0x01fe80b9…), i.e. ~176k overhead. Rounded up.
+    uint256 constant PROXY_OVERHEAD = 180_000;
     address constant SYSTEM = 0x8888888888888888888888888888888888888888;
     uint256 constant CHAIN = 1301;
 
@@ -416,7 +419,7 @@ contract ParallaxForkTest is Test {
         uint256 usdcBefore = usdc.balanceOf(alice);
         vm.recordLogs();
         vm.prank(CALLBACK_PROXY);
-        (bool ok,) = address(executor).call{gas: cb.gasLimit}(payload);
+        (bool ok,) = address(executor).call{gas: cb.gasLimit - PROXY_OVERHEAD}(payload);
         assertTrue(ok, "callback succeeded");
         assertGt(usdc.balanceOf(alice), usdcBefore, "alice got USDC");
         assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
@@ -588,7 +591,7 @@ contract ParallaxForkTest is Test {
         }
         vm.recordLogs();
         vm.prank(CALLBACK_PROXY);
-        (bool ok,) = address(executor).call{gas: cb.gasLimit}(payload);
+        (bool ok,) = address(executor).call{gas: cb.gasLimit - PROXY_OVERHEAD}(payload);
         assertTrue(ok);
         assertEq(POSM.getPositionLiquidity(positionId), 0);
         assertEq(IERC721(address(POSM)).ownerOf(positionId), alice);
@@ -714,8 +717,10 @@ contract ParallaxForkTest is Test {
         }
         vm.recordLogs();
         vm.prank(CALLBACK_PROXY);
-        (bool ok,) = address(executor).call{gas: cb.gasLimit}(payload);
-        assertTrue(ok, "callback ok");
+        // Forward what the real Callback Proxy would: the limit minus its own reserve (_extraGas 80k +
+        // _maxChargeGas 50k on these chains) and ~30k of intrinsic/calldata/pre-call overhead.
+        (bool ok,) = address(executor).call{gas: cb.gasLimit - PROXY_OVERHEAD}(payload);
+        assertTrue(ok, "callback ok within a realistic proxy gas budget");
         _deliverRecorded(uint256(keccak256(abi.encode("cb", i))));
     }
 
@@ -816,5 +821,29 @@ contract ParallaxForkTest is Test {
         _deliverCallback(1);
         assertEq(uint8(executor.getRule(newId).status), uint8(RuleStatus.EXECUTED));
         assertTrue(executor.getRule(executor.nextRuleId() - 1).recenter);
+    }
+
+    /// @dev Regression for a bug found live on Base: with a 200k limit the proxy forwarded only 24,023 gas and
+    ///      raiseTrail ran out of gas (CallbackFailure, tx 0x01fe80b9…). Storage is cooled first so this matches a
+    ///      fresh transaction on the real chain.
+    function test_raiseTrail_fitsTheProxyGasBudget() public {
+        uint256 id = _createTrailing(200);
+        _pump(60_000e6);
+        bytes memory payload = abi.encodeCall(IParallaxExecutor.raiseTrail, (address(reactive), id, _tick()));
+
+        uint256 snap = vm.snapshotState();
+        vm.cool(address(executor));
+        vm.cool(address(PM));
+        vm.prank(CALLBACK_PROXY);
+        (bool oldBudgetOk,) = address(executor).call{gas: 24_023}(payload); // exactly what the live proxy forwarded
+        assertFalse(oldBudgetOk, "reproduces the live out-of-gas");
+        vm.revertToState(snap);
+
+        uint256 budget = reactive.RAISE_GAS_LIMIT() - PROXY_OVERHEAD; // read BEFORE prank (an external call consumes it)
+        vm.cool(address(executor));
+        vm.cool(address(PM));
+        vm.prank(CALLBACK_PROXY);
+        (bool ok,) = address(executor).call{gas: budget}(payload);
+        assertTrue(ok, "raiseTrail fits the current limit after the proxy reserve");
     }
 }

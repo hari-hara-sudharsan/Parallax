@@ -78,8 +78,10 @@ contract ParallaxReactive is AbstractReactive {
     /// @notice A trailing stop is only raised when it can tighten by at least this many ticks (≈ bps),
     ///         so a slowly rising price costs a raise every 0.2% instead of one per swap.
     int24 public constant TRAIL_STEP_TICKS = 20;
-    /// @notice Gas for a raiseTrail callback (one storage write + event; ≥ the 100k network minimum).
-    uint64 public constant RAISE_GAS_LIMIT = 200_000;
+    /// @notice Gas limit for raiseTrail callbacks. The Callback Proxy keeps ~130k of any limit for itself
+    ///         (plus intrinsic/calldata costs), so 200k left raiseTrail only ~35k and failed on Base (found
+    ///         live: CallbackFailure in tx 0x01fe80b9…). Billed on gas used, so a roomy limit costs nothing.
+    uint64 public constant RAISE_GAS_LIMIT = 500_000;
 
     // ── Config ──────────────────────────────────────────────────────────────
     struct ChainConfig {
