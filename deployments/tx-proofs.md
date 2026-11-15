@@ -28,12 +28,31 @@ One crash swap fired **two different rule types in one reactive transaction**.
 |---|---|---|---|
 | Arm trailing stop (rule 1, trail 1%) | Base | — (`create-trailing-stop`) | stop at tick 196471 (inverted axis: mUSDC is currency0) |
 | Pump → raise requested | Lasna | [`0x381c36bb…`](https://lasna.reactscan.net/tx/0x381c36bb42d68c45a86eb53d9610c75525d24b02803859f8b1c9ade14b387bfb) | `TrailRaiseRequested` at tick 195982 ✅ (reactive side worked) |
-| Raise callback | Base | [`0x01fe80b9…`](https://sepolia.basescan.org/tx/0x01fe80b9b2dfeade592234872566b6b13cdcd3bb988a503d6b04ac26e34b2f13) | ❌ **`CallbackFailure`: raiseTrail got only 24,023 gas** (the 200k limit minus the proxy's ~176k reserve) and ran out of gas. The stop stayed at its original level, which is safe. Fixed in code: `RAISE_GAS_LIMIT` = 500k, plus a regression test replaying the exact live budget. Needs redeploy (v4.1). |
+| Raise callback | Base | [`0x01fe80b9…`](https://sepolia.basescan.org/tx/0x01fe80b9b2dfeade592234872566b6b13cdcd3bb988a503d6b04ac26e34b2f13) | ❌ **`CallbackFailure`: raiseTrail got only 24,023 gas** (the 200k limit minus the proxy's ~176k reserve) and ran out of gas. The stop stayed at its original level, which is safe. Fixed: `RAISE_GAS_LIMIT` = 500k plus a regression test replaying the exact live budget; **verified live on v4.1 (below)**. |
 | Arm re-centring guard (rule 2) | Base | — (`create-recenter-guard`) | LP #33774 on [195360, 196560) |
 | **① Origin: crash** | Base | [`0xc355b894…`](https://sepolia.basescan.org/tx/0xc355b8947ee4d527d880b71213b880f4eab695809e4294b257a75c6f9c852394) · block 59061142 | tick 195982 → 197133: crosses the trailing stop AND leaves the LP range |
 | **② Reactive (one tx, two callbacks)** | Lasna | [`0x287e017c…`](https://lasna.reactscan.net/tx/0x287e017c6249f922e96332a5d58f106a3ca6c5cb726c35ef6d6b606a8c1a3b77) | `RuleTriggered` for rule 1 and rule 2 |
 | **③ Trailing stop executed** | Base | [`0x7b2cbe29…`](https://sepolia.basescan.org/tx/0x7b2cbe293708c470768f19f060a2dd0fc9afb6197a16c078f4109b4c55df4045) · block 59061148 | 1 mWETH → 2,732.21 mUSDC · **6 blocks ≈ 1.2 s** |
 | **③ LP re-centred** | Base | [`0x5b7cad58…`](https://sepolia.basescan.org/tx/0x5b7cad58a1b42632b0b39f3edf46949047a88cbaea519ea3dd2a51cccad6b6f8) · block 59061151 | old NFT #33774 returned empty; **new position #33775 on [196560, 197760)** around the new price (in range); new rule 3 guards it; dust refunded 0.94 mUSDC · **9 blocks ≈ 1.8 s** |
+
+## Week 2 live run, part 2: trailing stop with live raises (v4.1, Base Sepolia, 2026-11-15)
+
+After the raise-gas fix (v4.1), the full trailing loop ran live: the stop followed the price up twice, each raise
+requested by Reactive and **verified by the executor against the live tick**, then the crash fired it at the raised level.
+Trail = 1% (100 ticks); this pool's axis is inverted (mUSDC is currency0), so a rising WETH price is a falling tick.
+
+| Step | Lasna (reactive) | Base Sepolia (executor) | Effect |
+|---|---|---|---|
+| Arm | | `createTrailingStop` | stop at tick 197292 (spot 197192 + 100) |
+| Pump 1 → raise | `TrailRaiseRequested` [`0x66cf6624…`](https://lasna.reactscan.net/tx/0x66cf662447377c044724a6aed181d804366b237f7a8983fa4bb032cd08f230ae) | `RuleUpdated` [`0xace7b33d…`](https://sepolia.basescan.org/tx/0xace7b33d714b1d5b4d34d029b8d83a2b897cbd7b34eddf0d0f22605bc4a428dc) | stop **197292 → 196889** |
+| | `MirrorUpdated` [`0xc75e6949…`](https://lasna.reactscan.net/tx/0xc75e6949d01993f1ae9451267b2e43f8872f1dac0463c31834d705780b62b2de) | | mirror follows |
+| Pump 2 → raise | `TrailRaiseRequested` [`0x21ef448a…`](https://lasna.reactscan.net/tx/0x21ef448a34f92b64214d8dd684dbdcb3c80c7966f49ac74ceb37676bbb4e6f59) | `RuleUpdated` [`0x5482e018…`](https://sepolia.basescan.org/tx/0x5482e018c796495119510543382724ee7014cdfd455f3311be7dfb249ecbfc6a) | stop **196889 → 196490** |
+| | `MirrorUpdated` [`0x64e88564…`](https://lasna.reactscan.net/tx/0x64e8856430a4332d32005c446ca8a42eb840c5887f834f30fc96da8fe291ce9e) | | mirror follows |
+| **① Origin: crash** | | [`0x8dda106e…`](https://sepolia.basescan.org/tx/0x8dda106e4702d2444fcd624220df1844cd46dd77c754e4a9eccd1d5d0111f39d) · block 59074364 | tick 196390 → 197518 |
+| **② Reactive** | `RuleTriggered` [`0x65a465c7…`](https://lasna.reactscan.net/tx/0x65a465c755f45566f62c471b89217526d82ea1cf0076107d6afa0c5e390dae75) | | |
+| **③ Executed at the raised stop** | | [`0x4c738a6d…`](https://sepolia.basescan.org/tx/0x4c738a6d8c39039b6ca76739ca4f49f0cc23ac519ac97e0f3b302cd9a5d7c017) · block 59074376 | 1 mWETH → 2,628.48 mUSDC · **12 blocks ≈ 2.4 s** |
+
+Without the trail the stop would still have been at 197292: the raises tightened it by ~8% before the crash.
 
 ## Earlier single-chain proofs (v1/v2) (for the README / submission)
 

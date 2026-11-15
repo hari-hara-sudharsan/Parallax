@@ -81,9 +81,10 @@ Details: [`docs/architecture.md`](docs/architecture.md).
 
 | Contract | Chain | Address |
 |---|---|---|
-| ParallaxReactive v4 (guards both chains; trailing stops + re-centring) | Reactive Lasna (5318007) | [`0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042`](https://lasna.reactscan.net/address/0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042) |
-| ParallaxExecutor v4 | Base Sepolia (84532) | [`0x058a746A2719CD0F0d4e29D4EcCC9900B6cF254e`](https://sepolia.basescan.org/address/0x058a746A2719CD0F0d4e29D4EcCC9900B6cF254e) |
-| ParallaxExecutor v4 | Unichain Sepolia (1301) | [`0xD83DE781AF09aCC1a2587f9e3A86426FfD36Ec9F`](https://sepolia.uniscan.xyz/address/0xD83DE781AF09aCC1a2587f9e3A86426FfD36Ec9F) |
+| ParallaxReactive v4.1 (guards both chains) | Reactive Lasna (5318007) | [`0xDf554201dec784F0541FA5fc884240c73113e334`](https://lasna.reactscan.net/address/0xDf554201dec784F0541FA5fc884240c73113e334) |
+| ParallaxExecutor v4.1 | Base Sepolia (84532) | [`0x2f772766ec926359093FA2d478FBDdcd828304Ff`](https://sepolia.basescan.org/address/0x2f772766ec926359093FA2d478FBDdcd828304Ff) |
+| ParallaxExecutor v4.1 | Unichain Sepolia (1301) | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
+| v4 (first live trailing + re-centre run) | Lasna / Base / Unichain | `0x7b8f…e042` / `0x058a…254e` / `0xD83D…Ec9F` |
 | ParallaxReactive / Executors v3 (the 44-round benchmark) | Lasna / Base / Unichain | `0x52e2…eC89` / `0x4d4f…Cbf9` / `0x8633…1181` |
 | Demo pool mUSDC / mWETH 0.3% (real Uniswap v4) | both | poolId `0xade8c1a3…6f89763c` |
 
@@ -110,7 +111,7 @@ One complete loop on Base Sepolia (a median round):
 |---|---|---|
 | [`0xff4b2163…`](https://sepolia.basescan.org/tx/0xff4b216379d1b7cfc068c32dde537ed30f75ce67909a3aa74614ed2e4ce1aa5a) · block 59015912 | [`0xcae7fcd8…`](https://lasna.reactscan.net/tx/0xcae7fcd8e035bb8940085940d42b55a8fb61b6890c7c5adc0e9afdfc1160b40e) | [`0xef98afe1…`](https://sepolia.basescan.org/tx/0xef98afe15fa08397a209e7c30f3dceac688536cc97bd0248c98bd4a451d440a0) · block 59015919 → **7 blocks ≈ 1.4 s** (take-profit, rule 25) |
 
-**Week 2 live run (v4):** one crash swap fired a **trailing stop (6 blocks ≈ 1.2 s)** and a **self-re-centring LP guard (9 blocks ≈ 1.8 s)** from a single reactive transaction: the LP position was withdrawn, re-opened as a same-width position around the new price, and is guarded again. Details and every tx: [`deployments/tx-proofs.md`](deployments/tx-proofs.md#week-2-live-run-trailing-stop--self-re-centring-lp-guard-v4-base-sepolia-2026-11-15). Earlier single-chain proofs (v1/v2) are in the same file.
+**Week 2 live run (v4):** one crash swap fired a **trailing stop (6 blocks ≈ 1.2 s)** and a **self-re-centring LP guard (9 blocks ≈ 1.8 s)** from a single reactive transaction: the LP position was withdrawn, re-opened as a same-width position around the new price, and is guarded again. Details and every tx: [`deployments/tx-proofs.md`](deployments/tx-proofs.md#week-2-live-run-trailing-stop--self-re-centring-lp-guard-v4-base-sepolia-2026-11-15). On v4.1 a **trailing stop followed the price up twice** (each raise requested by Reactive and verified by the executor against the live tick), then fired at the raised level. Earlier single-chain proofs (v1/v2) are in the same file.
 
 ## 7. Run it yourself
 
@@ -153,11 +154,9 @@ cd web && npm install && npm run dev   # dashboard on http://localhost:3000
   so each chain's executor acts only on its own pool. One reactive contract still serves both chains.
 - **Funding is real**: the reactive contract pays lREACT per reactive tx and each executor pays ETH per callback; any
   debt pauses service (by design of Reactive Network).
-- **Trailing-stop raises failed live on v4** (found during the Week 2 run): the raise callback's gas limit (200k) left
-  only 24,023 gas after the Callback Proxy's reserve, so `raiseTrail` ran out of gas (`CallbackFailure`, tx
-  `0x01fe80b9…`). The stop stayed at its original level, which is safe, and the rule still executed at that level.
-  Fixed in code (500k limit + a regression test that replays the exact live budget with cold storage); the
-  live re-run needs the next deployment.
+- **Found and fixed live:** on v4 the trailing-stop raise callback ran out of gas (its 200k limit left 24,023 gas
+  after the Callback Proxy's reserve). Fixed in v4.1 (500k, plus a regression test replaying that exact budget) and
+  verified live: see the proof file.
 
 ## 10. Roadmap
 
