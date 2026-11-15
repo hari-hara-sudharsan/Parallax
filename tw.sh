@@ -84,6 +84,35 @@ case "$cmd" in
       --rpc-url "$UNICHAIN_SEPOLIA_RPC"
     echo "(status: 1=ACTIVE 2=EXECUTED 3=CANCELLED)" ;;
 
+  proof)            # ./tw.sh proof <originSwapTx>  → finds the reactive tx + callback tx, prints a proof row
+    O="${1:?origin swap tx hash}"; O=$(echo "$O" | tr 'A-F' 'a-f'); OH=${O#0x}
+    R=$(saved 5318007 tripwireReactive); E=$(saved 1301 tripwireExecutor)
+    OB=$(cast receipt "$O" blockNumber --rpc-url "$UNICHAIN_SEPOLIA_RPC")
+    T0=$(cast block "$OB" --field timestamp --rpc-url "$UNICHAIN_SEPOLIA_RPC")
+    # Reactive side: RuleTriggered(ruleId, poolId, tick, originTxHash) logs that carry this origin hash.
+    LB=$(cast block-number --rpc-url "$LASNA_RPC")
+    RT=$(cast logs --address "$R" "$(cast keccak 'RuleTriggered(uint256,bytes32,int24,uint256)')" \
+          --from-block $((LB-900)) --to-block latest --rpc-url "$LASNA_RPC" --json \
+        | python -c "import json,sys; print(' '.join(l['transactionHash'] for l in json.load(sys.stdin) if '$OH' in l['data']))")
+    # Destination side: RuleExecuted logs whose data carries this origin hash.
+    EX=$(cast logs --address "$E" "$(cast keccak 'RuleExecuted(uint256,address,int24,uint256,uint256,uint256,uint256)')" \
+          --from-block "$OB" --to-block latest --rpc-url "$UNICHAIN_SEPOLIA_RPC" --json \
+        | python -c "
+import json,sys
+for l in json.load(sys.stdin):
+    d=l['data'][2:]
+    if '$OH' in d:
+        w=[d[i:i+64] for i in range(0,len(d),64)]
+        print(l['transactionHash'], int(l['topics'][1],16), int(w[1],16), int(w[2],16), int(w[4],16))")
+    echo "origin   $O  block $OB  T0=$T0"
+    for t in $RT; do echo "reactive $t  (Lasna)"; done
+    while read -r tx rule a0 a1 t1; do
+      [[ -z "$tx" ]] && continue
+      echo "callback $tx  rule $rule  amount0Out=$a0 amount1Out=$a1  T1=$t1"
+      echo "latency  $((t1 - T0)) s"
+    done <<< "$EX"
+    if [[ -z "$EX" ]]; then echo "callback (not found yet: try again in a few seconds)"; fi ;;
+
   callbacks)        # ./tw.sh callbacks <reactiveTxHash>  → destination tx hash(es) for a reactive tx
     cast call "$SYSTEM_CONTRACT" "getCallbacks(uint256)((uint256,address,uint256,uint256,uint256,bytes)[])" \
       "$(cast to-dec "${1:?reactive tx hash}")" --rpc-url "$LASNA_RPC" ;;
@@ -165,7 +194,8 @@ Core loop (Phase 2):
   fund-executor [amt]   top up TripwireExecutor callback reserves (ETH)
   debts             balances / reserves / debt on both sides
   rule <id>         on-chain status of a rule
-  callbacks <tx>    destination tx hash for a Lasna reactive tx (proof table)
+  proof <originTx>  origin → reactive → callback tx + latency for one run (proof table row)
+  callbacks <tx>    destination tx hash for a Lasna reactive tx
 EOF
     ;;
 esac
