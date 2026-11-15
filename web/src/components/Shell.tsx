@@ -126,7 +126,7 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
         ))}
       </nav>
 
-      <main className="px-5 pb-28 pt-8 md:ml-[55px] md:px-12 md:pb-16 md:pt-12">
+      <main className="min-w-0 overflow-x-clip px-5 pb-28 pt-8 md:ml-[55px] md:px-12 md:pb-16 md:pt-12">
         <div className="mx-auto max-w-[1200px]">{children}</div>
       </main>
     </div>

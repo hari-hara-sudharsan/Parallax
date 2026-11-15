@@ -50,10 +50,12 @@ function Row({ it, i }: { it: FeedItem; i: number }) {
       summary={
         <span className="block">
           <span className="flex items-center gap-3">
-            <span className="min-w-0 flex-1 truncate text-[15px] text-ink">
+            <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[15px] text-ink">
               {c.short} <span className="text-muted">· rule {it.ruleId.toString()}</span>
             </span>
-            {done ? <Chip tone="executed">Executed</Chip> : <Chip tone="triggered">On its way</Chip>}
+            {/* On a phone the status is a dot, so the row's name never truncates. */}
+            <span className="hidden sm:inline-flex">{done ? <Chip tone="executed">Executed</Chip> : <Chip tone="triggered">On its way</Chip>}</span>
+            <span aria-label={done ? "Executed" : "On its way"} className={"h-2 w-2 flex-none rounded-full sm:hidden " + (done ? "bg-executed" : "bg-triggered")} />
             <span className="num w-16 text-right text-[17px] font-semibold text-ink">
               {it.latencySeconds !== undefined ? `${it.latencySeconds.toFixed(1)} s` : "…"}
             </span>

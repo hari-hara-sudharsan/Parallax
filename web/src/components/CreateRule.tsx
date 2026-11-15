@@ -37,7 +37,19 @@ export function CreateRule() {
         options={TABS.map((t) => t.id)}
         value={tab}
         onChange={setTab}
-        render={(id) => TABS.find((t) => t.id === id)!.label}
+        render={(id) =>
+          id === "range" ? (
+            <>
+              Range<span className="hidden sm:inline"> guard</span>
+            </>
+          ) : id === "trail" ? (
+            <>
+              Trail<span className="hidden sm:inline">ing</span>
+            </>
+          ) : (
+            TABS.find((t) => t.id === id)!.label
+          )
+        }
         className="overflow-x-auto"
       />
       <p className="mt-4 text-[15px] text-muted">{TABS.find((t) => t.id === tab)!.blurb}</p>

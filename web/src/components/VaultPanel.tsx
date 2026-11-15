@@ -97,7 +97,7 @@ export function VaultPanel() {
   const reacted = (history ?? []).filter((e) => e.reason && e.reason !== "deposit");
 
   return (
-    <div className="grid gap-8">
+    <div className="grid grid-cols-1 gap-8">
       <section aria-label="Vault figures" style={{ "--i": 0 } as React.CSSProperties} className="m-rise rounded-[20px] bg-panel">
         <div className="grid gap-px overflow-hidden rounded-[20px] bg-line md:grid-cols-[1.3fr_1fr_1.2fr]">
           <div className="bg-panel px-7 py-6">
@@ -127,7 +127,7 @@ export function VaultPanel() {
         </div>
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         <Panel
           i={1}
           className="lg:col-span-7"

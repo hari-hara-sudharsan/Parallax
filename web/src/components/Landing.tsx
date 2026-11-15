@@ -139,7 +139,7 @@ function Hero() {
           </h1>
           <p className="m-view mt-7 max-w-[34ch] text-[17px] leading-7 text-muted lg:mt-10 lg:text-[19px] lg:leading-8" style={{ animationDelay: "120ms" }}>
             Parallax sells your Uniswap position the moment the price crosses your line, about{" "}
-            <span className="num text-ink">{facts.baseSeconds.toFixed(1)} s</span> later. Reactive Network runs it, so there is no bot to fail.
+            <span className="num whitespace-nowrap text-ink">{facts.baseSeconds.toFixed(1)} s</span> later. Reactive Network runs it, so there is no bot to fail.
           </p>
           <div className="m-view mt-9 flex flex-wrap items-center gap-4" style={{ animationDelay: "220ms" }}>
             <Link href="/app#guards" className="m-lift inline-flex h-[56px] items-center gap-3 rounded-full bg-ink px-8 text-[17px] font-semibold text-bg">
@@ -242,7 +242,7 @@ const STEPS = [
   { clause: "First you set a line.", field: "bg-[#0d0d0e]" },
   { clause: "Then the market crosses it.", field: "bg-[#161618]" },
   { clause: "Reactive sees it on Lasna.", field: "bg-[#202023]" },
-  { clause: "Your stop executes, 2 s later.", field: "bg-active text-black" },
+  { clause: "Your stop executes, 2 s later.", field: "bg-active text-black" },
 ];
 
 function RuleCard({ step }: { step: number }) {
@@ -266,7 +266,7 @@ function RuleCard({ step }: { step: number }) {
         </span>
       </div>
       <div className="num mt-3 text-[32px] font-semibold tracking-[-0.03em]">$1,928.17</div>
-      <div className="mt-1 text-[13px] text-muted">sell 0.5 mWETH at or below</div>
+      <div className="mt-1 whitespace-nowrap text-[13px] text-muted">sell 0.5 mWETH at or below</div>
       <div className="mt-4 space-y-2">
         {row("Price", step === 0 ? "$1,935.89" : "$1,922.01", true)}
         {row("Reactive", step >= 2 ? "fired" : "watching", step >= 2)}
@@ -278,18 +278,18 @@ function RuleCard({ step }: { step: number }) {
 
 function HowItWorks() {
   return (
-    <section id="how" aria-labelledby="how-h" className="grid md:grid-cols-4">
+    <section id="how" aria-labelledby="how-h" className="grid md:grid-cols-2 lg:grid-cols-4">
       {STEPS.map((s, i) => (
-        <div key={i} data-reveal style={S(i)} className={cx("relative flex min-h-[64svh] flex-col px-5 pb-8 pt-8 md:min-h-[84svh] md:px-7", s.field)}>
+        <div key={i} data-reveal style={S(i)} className={cx("relative flex min-h-[64svh] flex-col px-5 pb-8 pt-8 md:min-h-[56svh] md:px-7 lg:min-h-[84svh]", s.field)}>
           {i === 0 && (
-            <h2 id="how-h" className="text-[24px] font-bold tracking-[-0.02em] md:text-[32px]">
+            <h2 id="how-h" className="whitespace-nowrap text-[24px] font-bold tracking-[-0.02em] md:text-[32px]">
               How it works
             </h2>
           )}
           <div className="flex flex-1 items-center justify-start md:justify-center">
             <RuleCard step={i} />
           </div>
-          <p className={cx("max-w-[14ch] text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] md:text-[clamp(22px,2vw,32px)]", i === 3 ? "text-black" : "text-ink")}>
+          <p className={cx("max-w-[16ch] text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] lg:text-[clamp(22px,2vw,32px)]", i === 3 ? "text-black" : "text-ink")}>
             {s.clause}
           </p>
         </div>
@@ -356,17 +356,17 @@ function Showcase() {
 function Proof() {
   const f = useFacts();
   const tiles: [string, string][] = [
-    [`${f.baseSeconds.toFixed(1)} s`, `median on Base, ${f.baseBlocks} blocks`],
-    ["32 of 32", "benchmark stops filled on Base"],
-    [`${f.keeperBlocks} blocks`, "a keeper bot’s median, same pool"],
-    [`${f.uniBlocks} blocks`, "median on Unichain, 1 s blocks"],
+    [`${f.baseSeconds.toFixed(1)} s`, `median on Base, ${f.baseBlocks} blocks`],
+    ["32 of 32", "benchmark stops filled on Base"],
+    [`${f.keeperBlocks} blocks`, "a keeper bot’s median, same pool"],
+    [`${f.uniBlocks} blocks`, "median on Unichain, 1 s blocks"],
     [`${f.loops}`, "loops stored with all three transactions"],
     ["0", "bots, servers or keys of ours in the loop"],
   ];
   return (
     <section id="proof" aria-labelledby="proof-h" className="mx-auto max-w-[1360px] px-5 py-24 md:px-10 md:py-32">
       <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 md:gap-2">
-        <div data-reveal className="col-span-2 flex min-h-[120px] flex-col justify-between rounded-[20px] bg-active p-6 text-black md:aspect-[3/1] md:min-h-0">
+        <div data-reveal className="col-span-2 flex min-h-[132px] flex-col justify-between gap-4 rounded-[20px] bg-active p-6 text-black lg:aspect-[3/1] lg:min-h-0">
           <h2 id="proof-h" className="text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-[clamp(28px,3vw,48px)]">
             Measured, not promised
           </h2>
@@ -376,7 +376,7 @@ function Proof() {
         </div>
         {tiles.map(([big, small], i) => (
           <div key={big + small} data-reveal style={S(i + 1)} className="flex aspect-[3/2] flex-col justify-end rounded-[20px] bg-panel p-5 md:p-6">
-            <span className="num text-[24px] font-bold leading-tight tracking-[-0.025em] md:text-[40px]">{big}</span>
+            <span className="num whitespace-nowrap text-[24px] font-bold leading-tight tracking-[-0.025em] md:text-[28px] lg:text-[40px]">{big}</span>
             <span className="mt-1 text-[13px] leading-5 text-muted md:text-[15px]">{small}</span>
           </div>
         ))}
@@ -427,7 +427,7 @@ function Features() {
             </span>
           </span>
         </Tile>
-        <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-4" caption="Re-checked on-chain" line="Nothing executes on stale data">
+        <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-4" caption="Re-checked on‑chain" line="Nothing executes on stale data">
           <span className="mt-1 inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[24px] font-semibold text-executed md:text-[30px] lg:text-[44px]">Executed</span>
         </Tile>
         <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-4" caption="About a second" line="Swap to execution on Base">
@@ -435,8 +435,8 @@ function Features() {
         </Tile>
         <Tile i={6} className="col-span-2 row-span-2 bg-panel md:col-span-6 md:row-span-2" caption="Vault" line="Steps out of a crash, back in when calm">
           <span className="flex flex-wrap gap-3 text-[20px] font-semibold md:text-[30px]">
-            <span className="rounded-full bg-danger/15 px-[0.5em] py-[0.1em] text-danger">Evacuated</span>
-            <span className="rounded-full bg-executed/15 px-[0.5em] py-[0.1em] text-executed">Re-entered</span>
+            <span className="whitespace-nowrap rounded-full bg-danger/15 px-[0.5em] py-[0.1em] text-danger">Evacuated</span>
+            <span className="whitespace-nowrap rounded-full bg-executed/15 px-[0.5em] py-[0.1em] text-executed">Re‑entered</span>
           </span>
         </Tile>
         <Tile i={7} className="col-span-2 row-span-2 bg-[#202023] md:col-span-6 md:row-span-2" caption="Base and Unichain" line="One reactive contract guards both">

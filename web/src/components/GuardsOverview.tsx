@@ -158,7 +158,7 @@ function Strip({ it, median }: { it: FeedItem; median?: { n: number; p50Seconds?
           <span className="ml-1 text-[28px] font-medium text-muted">s</span>
         </span>
         <span className="pb-2 text-[15px] text-muted">
-          from the swap to the stop executing on {c.short}, <span className="num">{Math.round(counted)}</span> blocks
+          from the swap to the stop executing on {c.short}, <span className="num whitespace-nowrap">{Math.round(counted)} blocks</span>
           {keeper !== undefined && n < keeper ? <>, ahead of a keeper bot</> : null}
         </span>
       </div>

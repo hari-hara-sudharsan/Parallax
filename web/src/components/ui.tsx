@@ -30,7 +30,7 @@ export function Panel({
   return (
     <section
       id={id}
-      className={cx("rounded-[20px] bg-panel", i !== undefined && "m-rise", className)}
+      className={cx("min-w-0 rounded-[20px] bg-panel", i !== undefined && "m-rise", className)}
       style={i !== undefined ? ({ "--i": i } as React.CSSProperties) : undefined}
     >
       {(title || aside) && (
@@ -177,7 +177,7 @@ export function Segmented<T extends string | number>({
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(o)}
             className={cx(
-              "relative z-10 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors duration-200",
+              "relative z-10 whitespace-nowrap rounded-full px-2.5 text-[13px] font-medium transition-colors duration-200 sm:px-3.5",
               on ? "text-ink" : "text-muted hover:text-ink",
             )}
           >
