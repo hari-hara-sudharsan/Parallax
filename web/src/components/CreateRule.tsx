@@ -25,6 +25,11 @@ const SLIPPAGE = [50, 100, 300, 500];
 
 export function CreateRule() {
   const [tab, setTab] = useState<Tab>("stop");
+  // Arriving from the home page's "Protect a position" dialog: open on the rule type it chose.
+  useEffect(() => {
+    const k = new URLSearchParams(window.location.search).get("kind");
+    if (k === "take") setTab("take");
+  }, []);
   return (
     <Panel title="Protect a position" i={1}>
       <Segmented<Tab>
@@ -61,6 +66,11 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
   const [amount, setAmount] = useState("1");
   const [slippage, setSlippage] = useState(300);
   const [editing, setEditing] = useState(false);
+  // …and the amount typed there.
+  useEffect(() => {
+    const a0 = new URLSearchParams(window.location.search).get("amount");
+    if (a0 && Number(a0) > 0) setAmount(a0);
+  }, []);
 
   // Default the trigger 3% away from the live price, once.
   useEffect(() => {

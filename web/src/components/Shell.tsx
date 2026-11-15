@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { LINKS } from "@/lib/deployment";
 import { BlockStamp, ChainSwitch, Mark, WalletButton } from "./Header";
@@ -62,9 +63,9 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
     <div className="min-h-screen">
       {/* Desktop rail */}
       <nav aria-label="Parallax" className="fixed inset-y-0 left-0 z-30 hidden w-[55px] flex-col items-center border-r border-line bg-bg py-4 md:flex">
-        <a href="#guards" aria-label="Parallax home" className="mb-6">
+        <Link href="/" aria-label="Parallax home" className="m-lift mb-6">
           <Mark />
-        </a>
+        </Link>
         <ul className="relative flex flex-col gap-2">
           <span
             aria-hidden
@@ -100,9 +101,9 @@ export function Shell({ view, onView, children }: { view: View; onView: (v: View
 
       {/* Phone: name + wallet on top, destinations at the bottom */}
       <div className="sticky top-0 z-30 flex h-12 items-center justify-between gap-3 border-b border-line bg-bg px-4 md:hidden">
-        <span className="flex items-center gap-2 text-[14px] font-semibold">
+        <Link href="/" className="flex items-center gap-2 text-[14px] font-semibold">
           <Mark size={24} /> Parallax
-        </span>
+        </Link>
         <WalletButton />
       </div>
       <nav aria-label="Parallax views" className="fixed inset-x-0 bottom-0 z-30 grid h-14 grid-cols-3 border-t border-line bg-bg md:hidden">

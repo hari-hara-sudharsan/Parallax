@@ -203,3 +203,41 @@ input[type="number"] {
   to { opacity: 1; transform: none; }
 }
 .m-open { animation: px-open 280ms var(--ease-out) both; }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Landing page. One motif: the loop Parallax produces on every execution, a capsule track with three
+ * stations (swap, Lasna, executed). Reveals only hide content once the script has marked <html class="js">,
+ * so the page reads fully without JavaScript.
+ * ───────────────────────────────────────────────────────────────────────────── */
+.js [data-reveal]:not(.is-in) { opacity: 0; transform: translateY(28px); }
+[data-reveal] { transition: opacity 800ms var(--ease-out), transform 800ms var(--ease-out); transition-delay: calc(var(--i, 0) * 80ms); }
+
+/* Signature move: the hero shape opens like a shutter from its left edge while the inside settles. */
+@keyframes lp-shutter {
+  from { clip-path: inset(0 100% 0 0 round 999px); }
+  to { clip-path: inset(0 0 0 0 round 999px); }
+}
+@keyframes lp-settle {
+  from { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+.lp-shutter { animation: lp-shutter 1100ms var(--ease-out) 200ms both; }
+.lp-settle { animation: lp-settle 1400ms var(--ease-out) 200ms both; transform-origin: left center; }
+
+/* A track that draws itself (scaleX) and stations that pop in at their moment. */
+.lp-track { transform-origin: left center; animation: px-draw var(--dur, 1200ms) var(--ease-out) var(--delay, 0ms) both; }
+.lp-pop { animation: lp-pop 600ms var(--ease-spring) var(--delay, 0ms) both; }
+@keyframes lp-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.lp-fade { animation: px-fade 600ms var(--ease-out) var(--delay, 0ms) both; }
+
+/* The motif as a bullet: a small capsule with three dots. */
+.lp-bullet { display: inline-flex; align-items: center; gap: 3px; height: 0.5em; padding: 0 0.22em; border-radius: 999px; background: rgb(var(--active)); vertical-align: 0.12em; }
+.lp-bullet i { width: 0.16em; height: 0.16em; border-radius: 999px; background: #000; display: block; }
+
+/* Hover lift for whole fields and tiles. */
+.lp-lift { transition: transform 200ms var(--ease-out); }
+.lp-lift:hover { transform: translateY(-6px); }

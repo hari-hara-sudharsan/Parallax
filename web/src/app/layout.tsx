@@ -7,7 +7,7 @@ const sans = Inter({ variable: "--font-sans", subsets: ["latin"], weight: ["400"
 const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"], weight: ["400", "500"] });
 
 export const metadata: Metadata = {
-  title: "Parallax · keeperless protection for Uniswap v4",
+  title: "Parallax: stops that never sleep",
   description: "Keeperless, ~1-second stop-loss and LP range protection for Uniswap v4, powered by Reactive Omni.",
 };
 
