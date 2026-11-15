@@ -1,0 +1,13 @@
+{
+  "name": "parallax-bench",
+  "private": true,
+  "type": "module",
+  "description": "Automated live-testnet latency benchmark for Parallax (origin swap -> reactive tx -> callback).",
+  "scripts": {
+    "bench": "node bench.mjs",
+    "summary": "node summary.mjs"
+  },
+  "dependencies": {
+    "viem": "2.57.19"
+  }
+}
