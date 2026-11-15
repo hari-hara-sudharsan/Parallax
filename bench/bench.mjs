@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, createWalletClient, http, parseAbi, parseUnits, toHex, defineChain } from "viem";
+import { createPublicClient, createWalletClient, http, parseAbi, parseUnits, toHex, defineChain, parseEventLogs } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia, unichainSepolia } from "viem/chains";
 import { writeSummary } from "./summary.mjs";
@@ -128,6 +128,22 @@ const wallet = createWalletClient({ account, chain: C.chain, transport: http(C.r
 const lpub = createPublicClient({ chain: lasna, transport: http() });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Unichain's public RPC serves Flashblocks: receipts arrive at ~200 ms preconfirmation, BEFORE the block
+ * is sealed. So never derive state from a follow-up "latest" read right after a receipt, and retry
+ * block lookups until the block exists.
+ */
+async function sealedBlock(blockNumber) {
+  for (let i = 0; i < 40; i++) {
+    try {
+      return await pub.getBlock({ blockNumber });
+    } catch {
+      await sleep(POLL_MS);
+    }
+  }
+  throw new Error(`block ${blockNumber} not sealed after 10 s`);
+}
+
 const tick = async () => (await pub.readContract({ address: C.stateView, abi: stateViewAbi, functionName: "getSlot0", args: [poolId] }))[1];
 
 async function send(req) {
@@ -167,7 +183,10 @@ async function round(i) {
       functionName: "createRule",
       args: [key, kind === "STOP_LOSS" ? 0 : 1, wethIs0, lower, upper, RULE_WETH, 300],
     });
-    const ruleId = (await pub.readContract({ address: executor, abi: executorAbi, functionName: "nextRuleId" })) - 1n;
+    // Rule id from the RuleCreated event in our own receipt (a follow-up read can lag under Flashblocks).
+    const [ev] = parseEventLogs({ abi: executorAbi, eventName: "RuleCreated", logs: created.logs });
+    if (!ev) throw new Error("RuleCreated event missing from receipt");
+    const ruleId = ev.args.ruleId;
     Object.assign(r, { ruleId: Number(ruleId), createTx: created.transactionHash, tickAtCreate: t, lower, upper });
 
     // 2. Wait for the reactive mirror (Lasna picked up RuleCreated and subscribed to the pool).
@@ -198,7 +217,7 @@ async function round(i) {
       ],
     });
     const tOrigin = Date.now();
-    const originBlock = await pub.getBlock({ blockNumber: origin.blockNumber });
+    const originBlock = await sealedBlock(origin.blockNumber);
     Object.assign(r, {
       originTx: origin.transactionHash,
       originBlock: Number(origin.blockNumber),
