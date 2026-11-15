@@ -6,5 +6,7 @@
   "parallaxReactiveV1": "0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5",
   "parallaxReactiveV2": "0xC3C04592057E816EB706eF0E9A9438267537B2A2",
   "parallaxReactiveV3": "0x52e292188E7f8dB587cB60fdd683100A8815eC89",
-  "parallaxReactiveV4": "0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042"
+  "parallaxReactiveV4": "0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042",
+  "parallaxVaultReactive": "0x5A9f48A2686245eB7418b5a15aF2D4A431251D02",
+  "parallaxVaultReactiveBlock": 8403219
 }

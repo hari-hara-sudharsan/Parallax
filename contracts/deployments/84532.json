@@ -9,6 +9,8 @@
   "parallaxExecutorBlockV4": 59059407,
   "parallaxExecutorV3": "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9",
   "parallaxExecutorV4": "0x058a746A2719CD0F0d4e29D4EcCC9900B6cF254e",
+  "parallaxVault": "0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49",
+  "parallaxVaultBlock": 59092930,
   "poolId": "0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c",
   "rangeGuardPositionId": 33774,
   "startPrice": 3000

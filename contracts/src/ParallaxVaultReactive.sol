@@ -185,11 +185,15 @@ contract ParallaxVaultReactive is AbstractReactive {
     }
 
     /// @dev Push (now, tick) and return the largest move between `tick` and any observation in the window.
+    ///      The most recent observation always counts, however old: it is the price right before this swap,
+    ///      so one big swap after a quiet spell is still seen as a fast move (found live: on a quiet pool the
+    ///      window was empty and a 10% crash was treated as a slow drift → rebalance instead of evacuate).
     function _record(int24 tick) internal returns (int24 maxMove) {
         uint256 cutoff = block.timestamp > WINDOW_SECONDS ? block.timestamp - WINDOW_SECONDS : 0;
+        uint256 last = (_head + OBS - 1) % OBS;
         for (uint256 i; i < OBS; ++i) {
             Obs memory o = _obs[i];
-            if (o.at == 0 || o.at < cutoff) continue;
+            if (o.at == 0 || (o.at < cutoff && i != last)) continue;
             int24 d = tick > o.tick ? tick - o.tick : o.tick - tick;
             if (d > maxMove) maxMove = d;
         }

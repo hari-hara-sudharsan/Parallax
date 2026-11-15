@@ -286,6 +286,20 @@ contract ParallaxVaultTest is Test {
         assertTrue(vault.tickLower() != lowerBefore);
     }
 
+    /// @dev Regression (found live on Base): a crash right after a quiet spell must still evacuate.
+    function test_crashAfterQuietSpell_stillEvacuates() public {
+        vm.recordLogs();
+        _deposit(alice, 1 ether, 3000e6);
+        _deliver();
+        vm.recordLogs();
+        _swap(true, 0.01 ether); // an earlier observation …
+        _deliver();
+        vm.warp(block.timestamp + 10 * WINDOW); // … that is long out of the window
+        assertEq(_swapAndLoop(true, 10 ether), 1);
+        assertEq(uint8(vault.mode()), uint8(ParallaxVault.Mode.EVACUATED));
+        assertEq(vault.rebalances(), 0);
+    }
+
     function test_inRangeQuietSwap_doesNothing() public {
         vm.recordLogs();
         _deposit(alice, 1 ether, 3000e6);

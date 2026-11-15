@@ -89,3 +89,10 @@ Scripts write these automatically to `contracts/deployments/<chainId>.json`; cop
 Deployer: `0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3`. **v3** (Week 1) is multi-chain: one ParallaxReactive registers each chain with `addChain`, and executors record every execution on-chain. (The Base v3 executor shares an address with the Unichain v1 executor: same deployer nonce on different chains.) v2 (Phase 3) adds two-sided bounds + RANGE_GUARD; the event
 layout changed, so both contracts were redeployed and linked with `setExecutor` ([`0x011d29eb…a191821a`](https://lasna.reactscan.net/tx/0x011d29eb8f7a17bc17fc74065d1196d7cd43f9c4aa75d5e882bb8620a191821a)). (ParallaxReactive and MockWETH share an address because each was the
 deployer's first contract (nonce 0) on its own chain.)
+
+## Parallax Vault (v1, deployed 2026-11-15)
+
+| Contract | Chain | Address | Notes |
+|---|---|---|---|
+| ParallaxVaultReactive (brain) | Lasna 5318007 | `0x5A9f48A2686245eB7418b5a15aF2D4A431251D02` | breaker 200 ticks / 60 s window / 60 s calm; old quiet-pool logic (see tx-proofs.md) |
+| ParallaxVault (pxLP) | Base Sepolia 84532 | `0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |

@@ -106,6 +106,33 @@ Mirrored on Lasna as bounds [195659, 196860], i.e. fire when `tick < tickLower` 
 
 ---
 
+## Run: Parallax Vault, live on Base Sepolia (vault v1), 2026-11-15
+
+A keeperless managed LP. One deposit; the vault then re-centred, evacuated during a crash and re-entered after
+the calm period, each time on its own, from Reactive callbacks. Vault `0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49`
+(Base Sepolia), brain `ParallaxVaultReactive` `0x5A9f48A2686245eB7418b5a15aF2D4A431251D02` (Lasna).
+Tuning: range ±300 ticks (≈ ±3%), breaker 200 ticks (≈ 2%) within 60 s, calm period 60 s.
+
+| Step | ① Origin swap (Base) | ② Reactive tx (Lasna) | ③ Vault callback (Base) | Latency |
+|---|---|---|---|---|
+| Deposit 1 mWETH + 2,600 mUSDC → position [197220, 197820) | [`0x509c01a0…6982aad8`](https://sepolia.basescan.org/tx/0x509c01a0266f36e8297bb81cf7cfd075306133dd86992e50f20ce43b6982aad8) | [`0x5822bde5…b4460bc0`](https://lasna.reactscan.net/tx/0x5822bde547707a561715b4d0e44489a2b35675dca61d90631f9ee0e1b4460bc0) (brain mirrors the range) | n/a | n/a |
+| **Re-centre**: 20 mWETH sold, tick 197566 → 198589, out of range | [`0x35167e2d…ab9d2db1`](https://sepolia.basescan.org/tx/0x35167e2ddc8f375a84c0f10251af11241bbd0641546f0f78b7bb9fe5ab9d2db1) (block 59093734) | [`0x7d2edd43…da9d851a`](https://lasna.reactscan.net/tx/0x7d2edd438d1a59f735f7bf96eea885a6eb6cdc9975e80e7333398dfeda9d851a) | [`0xeb70b073…110fb77a`](https://sepolia.basescan.org/tx/0xeb70b073812f409d5624ee2462c15c3f3381d84eb6ab86fc0e71e0b1110fb77a) (block 59093743): new range [198240, 198840), 534,754 gas | **9 blocks ≈ 1.8 s** |
+| **Evacuate**: 20 mWETH sold, tick 198679 → 199665 (986-tick move inside 60 s) | [`0x0f6265f3…15327e65`](https://sepolia.basescan.org/tx/0x0f6265f397a9b4440d5cb9f0a14980bc97b5d4ef6967faa1299d216815327e65) (block 59094330) | [`0x5a5982a3…8f065bfc`](https://lasna.reactscan.net/tx/0x5a5982a3c40e039fc734b7ba690118024aa5d9aa568e2b8e8413733a8f065bfc) | [`0x0222e94a…cf964dc1`](https://sepolia.basescan.org/tx/0x0222e94a16f5563ca86d4a9ff78bdefb5c9ffedaf1ea9b5fdfb18f12cf964dc1) (block 59094335): all liquidity pulled to idle, 218,691 gas | **5 blocks ≈ 1.0 s** |
+| **Re-enter**: first swap after 60 s of calm, tick 199667 → 199660 | [`0x19f10f09…e1e5a655`](https://sepolia.basescan.org/tx/0x19f10f09620c2e85a206bac75de79523bbd90b480b8fc0d9b19446d2e1e5a655) (block 59095108) | [`0x32e8ad80…82c58130`](https://lasna.reactscan.net/tx/0x32e8ad80e510408e315c729e62f4c86527fbe9ee86ff844c66e4aa3c82c58130) | [`0x547485ea…96d188ea`](https://sepolia.basescan.org/tx/0x547485eae84a98043c99e4f748f1a0a36659164abac575921aa9c41696d188ea) (block 59095114): new range [199320, 199920), 458,237 gas | **6 blocks ≈ 1.2 s** |
+
+The Lasna `VaultActionRequested` event of each reactive tx carries the origin tx hash, which is how the rows are
+linked. Every callback re-checked its condition on Base before acting.
+
+**Bug found live (fixed in code, not yet redeployed).** The first crash (row "Re-centre") should have been an
+evacuation. The pool had been quiet for over a minute, so the brain's 60-second price window was empty and the
+10% move looked like a slow drift; the vault re-centred into the falling price instead of stepping aside. The
+second crash came seconds after another swap and evacuated correctly. Fix: the brain now always compares against
+the last price it saw, however old (`_record` in `ParallaxVaultReactive.sol`, regression test
+`test_crashAfterQuietSpell_stillEvacuates`). The deployed brain still has the old logic until it is redeployed
+(~0.17 lREACT).
+
+---
+
 ## How to add a row
 
 ```bash
