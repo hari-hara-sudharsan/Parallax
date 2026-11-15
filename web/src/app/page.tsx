@@ -1,18 +1,64 @@
-import { PoolStatus } from "@/components/PoolStatus";
+import { CreateRule } from "@/components/CreateRule";
+import { DemoPanel } from "@/components/DemoPanel";
+import { Header } from "@/components/Header";
+import { Hero } from "@/components/Hero";
+import { LiveFeed } from "@/components/LiveFeed";
+import { MyRules } from "@/components/MyRules";
+import { DEPLOYMENT, LINKS } from "@/lib/deployment";
 
-/** Phase 1 placeholder. The real dashboard (create rule, my rules, live feed) lands in Phase 4. */
+const FLOW = [
+  { n: "1", title: "You arm a rule", body: "Deposit tokens or an LP NFT into TripwireExecutor on Unichain. It emits RuleCreated." },
+  { n: "2", title: "Reactive mirrors it", body: "TripwireReactive on Lasna picks up the event and subscribes to that pool's swaps." },
+  { n: "3", title: "Price crosses", body: "Any swap that moves the tick past your line reaches react() about a second later." },
+  { n: "4", title: "Callback executes", body: "The executor re-checks the price on-chain, then swaps or withdraws your position." },
+];
+
 export default function Home() {
   return (
-    <main className="mx-auto max-w-2xl px-4 py-16">
-      <p className="text-xs font-medium uppercase tracking-widest text-neutral-500">Reactive Omni · Uniswap v4</p>
-      <h1 className="mt-2 text-4xl font-semibold tracking-tight">Tripwire</h1>
-      <p className="mt-3 text-neutral-600 dark:text-neutral-400">
-        Set a rule once. When the price crosses, Reactive executes it in about a second. No bots, no servers.
-      </p>
-      <section className="mt-10">
-        <h2 className="mb-3 text-sm font-medium text-neutral-500">Demo pool · mWETH / mUSDC · Unichain Sepolia</h2>
-        <PoolStatus />
-      </section>
-    </main>
+    <>
+      <Header />
+      <Hero />
+
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <div className="space-y-4">
+            <CreateRule />
+            <DemoPanel />
+          </div>
+          <div className="space-y-4">
+            <LiveFeed />
+            <MyRules />
+          </div>
+        </div>
+
+        <section className="mt-12">
+          <h2 className="text-[13px] font-medium tracking-wide text-muted">How it works</h2>
+          <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {FLOW.map((s) => (
+              <li key={s.n} className="rounded-2xl border border-line bg-panel p-5">
+                <span className="num text-xs text-triggered">0{s.n}</span>
+                <h3 className="mt-2 text-sm font-medium">{s.title}</h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{s.body}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <footer className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
+          <span>Built for the Reactive Omni Buildathon · Track 1 “Every Second Counts”</span>
+          <span className="flex gap-4">
+            <a className="hover:text-muted" href={LINKS.unichainAddress(DEPLOYMENT.executor)} target="_blank" rel="noreferrer">
+              Executor ↗
+            </a>
+            <a className="hover:text-muted" href={LINKS.lasnaAddress(DEPLOYMENT.reactive)} target="_blank" rel="noreferrer">
+              Reactive ↗
+            </a>
+            <a className="hover:text-muted" href={LINKS.repo} target="_blank" rel="noreferrer">
+              Source ↗
+            </a>
+          </span>
+        </footer>
+      </main>
+    </>
   );
 }
