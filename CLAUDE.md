@@ -206,7 +206,7 @@ tripwire/
 - **Phase 1, Scaffold:** ✅ done 2026-11-15. Foundry + Next.js setup, `.env.example`, Makefile, mock tokens, pool creation + liquidity scripts. Deploy the demo pool on Unichain Sepolia.
 - **Phase 2, Core loop (MUST HAVE):** ✅ done 2026-11-15 (live loop, 2 s latency, see `deployments/tx-proofs.md`). `STOP_LOSS` end to end. Create a rule → push the price → reactive fires → callback executes the swap on-chain. Save the tx hashes to `deployments/tx-proofs.md`. **This phase is the hackathon's hard gate, so nothing else matters until it works.**
 - **Phase 3:** ✅ done 2026-11-15 (v2 contracts, both rule types executed live). `TAKE_PROFIT` + `RANGE_GUARD` (start with withdraw; re-centre if time allows).
-- **Phase 4, Frontend:** create rule, my rules, live feed with latency, demo button.
+- **Phase 4, Frontend:** ✅ built 2026-11-15 (`web/`, live data paths verified with `npm run smoke`; needs a hands-on wallet run). create rule, my rules, live feed with latency, demo button.
 - **Phase 5, Stretch:** `DEPEG_EXIT`, then cross-chain (Base Sepolia origin → Unichain Sepolia destination).
 - **Phase 6, Polish:** README, architecture doc, tests passing, demo script, final proofs.
 
