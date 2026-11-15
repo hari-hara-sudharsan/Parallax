@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 
 /**
- * The live testnet deployment (v3, multi-chain). Sources + deploy txs: deployments/addresses.md.
+ * The live testnet deployment (v4: multi-chain + trailing stops + re-centring range guards). Sources + deploy txs: deployments/addresses.md.
  * One ParallaxReactive on Reactive Lasna guards a ParallaxExecutor on each chain below.
  */
 
@@ -41,8 +41,8 @@ export const CHAINS: Record<ChainKey, ChainDeployment> = {
     name: "Unichain Sepolia",
     short: "Unichain",
     blockMs: 1000,
-    executor: "0x86338DDBD3E2E8546Ff48b3fd4cdb41D40A11181",
-    executorDeployBlock: 67872175n,
+    executor: "0xD83DE781AF09aCC1a2587f9e3A86426FfD36Ec9F",
+    executorDeployBlock: 67881286n,
     mockWETH: MOCK_WETH,
     mockUSDC: MOCK_USDC,
     poolId: POOL_ID,
@@ -61,8 +61,8 @@ export const CHAINS: Record<ChainKey, ChainDeployment> = {
     name: "Base Sepolia",
     short: "Base",
     blockMs: 200,
-    executor: "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9",
-    executorDeployBlock: 59013825n,
+    executor: "0x058a746A2719CD0F0d4e29D4EcCC9900B6cF254e",
+    executorDeployBlock: 59059407n,
     mockWETH: MOCK_WETH,
     mockUSDC: MOCK_USDC,
     poolId: POOL_ID,
@@ -81,7 +81,7 @@ export const CHAIN_LIST = [CHAINS.base, CHAINS.unichain];
 export const chainById = (id: number) => CHAIN_LIST.find((c) => c.chainId === id);
 
 export const REACTIVE = {
-  address: "0x52e292188E7f8dB587cB60fdd683100A8815eC89" as Address,
+  address: "0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042" as Address,
   systemContract: "0x8888888888888888888888888888888888888888" as Address,
 };
 
