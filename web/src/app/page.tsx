@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { LiveFeed } from "@/components/LiveFeed";
 import { MyRules } from "@/components/MyRules";
+import { VaultPanel } from "@/components/VaultPanel";
 import { CHAINS, LINKS, REACTIVE } from "@/lib/deployment";
 
 const FLOW = [
@@ -29,6 +30,10 @@ export default function Home() {
             <LiveFeed />
             <MyRules />
           </div>
+        </div>
+
+        <div className="mt-4">
+          <VaultPanel />
         </div>
 
         <section className="mt-12">

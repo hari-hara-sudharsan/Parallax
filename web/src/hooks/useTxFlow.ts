@@ -2,8 +2,9 @@
 
 import { useCallback, useState } from "react";
 import type { Hex } from "viem";
-import { usePublicClient, useWriteContract } from "wagmi";
-import { unichainSepolia } from "@/lib/chains";
+import { useWriteContract } from "wagmi";
+import { chainClients } from "@/lib/clients";
+import { chainById } from "@/lib/deployment";
 
 type WriteArgs = Parameters<ReturnType<typeof useWriteContract>["writeContractAsync"]>[0];
 
@@ -21,12 +22,10 @@ export type FlowState =
  */
 export function useTxFlow() {
   const { writeContractAsync } = useWriteContract();
-  const client = usePublicClient({ chainId: unichainSepolia.id });
   const [state, setState] = useState<FlowState>({ status: "idle" });
 
   const run = useCallback(
     async (steps: Step[]) => {
-      if (!client) return;
       let last: Hex | undefined;
       try {
         for (let i = 0; i < steps.length; i++) {
@@ -34,7 +33,10 @@ export function useTxFlow() {
           // Steps are built from typed ABIs at the call site; the stored union loses wagmi's generics.
           const hash = await writeContractAsync(steps[i].request as Parameters<typeof writeContractAsync>[0] & never);
           setState({ status: "running", step: steps[i].label, index: i, total: steps.length, hash });
-          const receipt = await client.waitForTransactionReceipt({ hash });
+          // Wait on the chain the step was sent to (Base or Unichain), not a fixed one.
+          const chain = chainById(Number((steps[i].request as { chainId?: number }).chainId));
+          if (!chain) throw new Error(`${steps[i].label}: unsupported chain`);
+          const receipt = await chainClients[chain.key].waitForTransactionReceipt({ hash });
           if (receipt.status !== "success") throw new Error(`${steps[i].label} reverted`);
           last = hash;
         }
@@ -45,7 +47,7 @@ export function useTxFlow() {
         setState({ status: "error", message: message.split("\n")[0] });
       }
     },
-    [client, writeContractAsync],
+    [writeContractAsync],
   );
 
   const reset = useCallback(() => setState({ status: "idle" }), []);

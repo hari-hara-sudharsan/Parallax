@@ -1,5 +1,12 @@
 /** ABIs used by the app. Parallax + mocks are generated from the Foundry build (see ./generated). */
-export { parallaxExecutorAbi, parallaxReactiveAbi, poolSwapTestAbi, mockErc20Abi } from "./generated/abis";
+export {
+  parallaxExecutorAbi,
+  parallaxReactiveAbi,
+  poolSwapTestAbi,
+  mockErc20Abi,
+  parallaxVaultAbi,
+  parallaxVaultReactiveAbi,
+} from "./generated/abis";
 
 /** Uniswap v4 StateView (lens over PoolManager storage). */
 export const stateViewAbi = [

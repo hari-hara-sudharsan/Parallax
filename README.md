@@ -48,6 +48,19 @@ in a couple of seconds. Parallax measures this on-chain, round after round.
 
 Every rule fires on `tick <= lowerTick || tick >= upperTick`; one representation covers all of them.
 
+**Parallax Vault (keeperless managed LP).** Deposit both pool tokens once and get `pxLP` shares. A second reactive
+contract (the vault's "brain" on Lasna) watches every swap and keeps a short price history by timestamp:
+
+| Situation | What the vault does |
+|---|---|
+| price drifts out of the range | **re-centres**: re-opens the same width around the price |
+| price moves ≥ 2% within 60 s (a crash in progress) | **evacuates**: pulls all liquidity out so it is not sold into the move |
+| evacuated, and the market has been calm for 60 s | **re-enters** around the new price |
+
+Each callback re-checks its condition against the live pool on Base before moving money. Honest trade-off: stepping
+out of a crash avoids being sold into it, but if the price snaps straight back the vault re-enters lower and can end
+slightly behind a passive LP. The gain is time in range (earning fees) and a circuit breaker, not guaranteed profit.
+
 ## 4. How it works
 
 ```
@@ -86,6 +99,8 @@ Details: [`docs/architecture.md`](docs/architecture.md).
 | ParallaxExecutor v4.1 | Unichain Sepolia (1301) | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
 | v4 (first live trailing + re-centre run) | Lasna / Base / Unichain | `0x7b8f…e042` / `0x058a…254e` / `0xD83D…Ec9F` |
 | ParallaxReactive / Executors v3 (the 44-round benchmark) | Lasna / Base / Unichain | `0x52e2…eC89` / `0x4d4f…Cbf9` / `0x8633…1181` |
+| ParallaxVaultReactive v2 (vault brain) | Reactive Lasna (5318007) | [`0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24`](https://lasna.reactscan.net/address/0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24) |
+| ParallaxVault v2 (`pxLP`) | Base Sepolia (84532) | [`0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F`](https://sepolia.basescan.org/address/0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F) |
 | Demo pool mUSDC / mWETH 0.3% (real Uniswap v4) | both | poolId `0xade8c1a3…6f89763c` |
 
 Earlier versions, deploy transactions and every third-party address with its source: [`deployments/addresses.md`](deployments/addresses.md).
@@ -112,6 +127,11 @@ One complete loop on Base Sepolia (a median round):
 | [`0xff4b2163…`](https://sepolia.basescan.org/tx/0xff4b216379d1b7cfc068c32dde537ed30f75ce67909a3aa74614ed2e4ce1aa5a) · block 59015912 | [`0xcae7fcd8…`](https://lasna.reactscan.net/tx/0xcae7fcd8e035bb8940085940d42b55a8fb61b6890c7c5adc0e9afdfc1160b40e) | [`0xef98afe1…`](https://sepolia.basescan.org/tx/0xef98afe15fa08397a209e7c30f3dceac688536cc97bd0248c98bd4a451d440a0) · block 59015919 → **7 blocks ≈ 1.4 s** (take-profit, rule 25) |
 
 **Week 2 live run (v4):** one crash swap fired a **trailing stop (6 blocks ≈ 1.2 s)** and a **self-re-centring LP guard (9 blocks ≈ 1.8 s)** from a single reactive transaction: the LP position was withdrawn, re-opened as a same-width position around the new price, and is guarded again. Details and every tx: [`deployments/tx-proofs.md`](deployments/tx-proofs.md#week-2-live-run-trailing-stop--self-re-centring-lp-guard-v4-base-sepolia-2026-11-15). On v4.1 a **trailing stop followed the price up twice** (each raise requested by Reactive and verified by the executor against the live tick), then fired at the raised level. Earlier single-chain proofs (v1/v2) are in the same file.
+
+**Vault, live on Base:** after a deposit and 90 seconds with no trades, a ~9% crash made the vault **evacuate in
+9 blocks ≈ 1.8 s**; after 60 calm seconds it **re-entered in 8 blocks ≈ 1.6 s**. The v1 vault had re-centred into
+that same crash (a bug, below); v1 also shows a live re-centre in 9 blocks. Every tx:
+[`deployments/tx-proofs.md`](deployments/tx-proofs.md#run-parallax-vault-v2-fixed-brain-live-on-base-sepolia-2026-11-15).
 
 ## 7. Run it yourself
 
@@ -157,6 +177,13 @@ cd web && npm install && npm run dev   # dashboard on http://localhost:3000
 - **Found and fixed live:** on v4 the trailing-stop raise callback ran out of gas (its 200k limit left 24,023 gas
   after the Callback Proxy's reserve). Fixed in v4.1 (500k, plus a regression test replaying that exact budget) and
   verified live: see the proof file.
+
+- **Found and fixed live (vault):** on a quiet pool the v1 brain's 60-second price window was empty, so a 10% crash
+  looked like a slow drift and the vault re-centred into it instead of evacuating. The brain now always compares
+  against the last price it saw (regression test `test_crashAfterQuietSpell_stillEvacuates`); v2 evacuated on the
+  first try in the same scenario.
+- **Vault scope:** one pool, one range width, fixed tuning (±3%, 2% breaker, 60 s); a fast round-trip can cost it
+  versus a passive LP (see "What it does").
 
 ## 10. Roadmap
 

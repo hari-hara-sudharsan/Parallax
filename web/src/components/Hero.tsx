@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useActivity } from "@/hooks/useActivity";
 import { useChain } from "@/hooks/useChain";
 import { usePool } from "@/hooks/usePool";
+import { useRealUsers } from "@/hooks/useRealUsers";
 import { CHAINS } from "@/lib/deployment";
 import { fmtUsd } from "@/lib/price";
 import { cx } from "./ui";
@@ -13,6 +14,7 @@ export function Hero() {
   const { chain } = useChain();
   const { price, tick } = usePool(chain);
   const { data } = useActivity();
+  const { data: users } = useRealUsers();
 
   // Flash the price green/red on each change.
   const prev = useRef<number | undefined>(undefined);
@@ -63,6 +65,12 @@ export function Hero() {
               tick <span className="num text-ink">{tick ?? "…"}</span>
             </div>
           </div>
+          <p className="mt-3 text-xs text-muted" title="Distinct wallets that created a rule or deposited into the vault, excluding the deployer. Counted from on-chain logs.">
+            <span className="num text-ink">{users ? users.wallets : "…"}</span> real wallets have used Parallax
+            {users && users.wallets > 0 && (
+              <span className="text-faint"> · {users.ruleOwners} with rules, {users.depositors} in the vault</span>
+            )}
+          </p>
         </div>
 
         <div className="flex flex-col justify-end">

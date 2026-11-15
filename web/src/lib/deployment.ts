@@ -85,6 +85,25 @@ export const REACTIVE = {
   systemContract: "0x8888888888888888888888888888888888888888" as Address,
 };
 
+/**
+ * Parallax Vault v2 (keeperless managed LP) on the Base demo pool. Its brain runs on Lasna.
+ * v1 (retired, quiet-pool bug) is listed for the real-user count only. Sources: deployments/addresses.md.
+ */
+export const VAULT = {
+  chain: "base" as ChainKey,
+  address: "0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F" as Address,
+  deployBlock: 59098404n,
+  brain: "0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24" as Address,
+  brainDeployBlock: 8404251n,
+  halfWidthTicks: 300,
+  breakerTicks: 200,
+  windowSeconds: 60,
+  calmSeconds: 60,
+};
+
+/** The deployer wallet runs the scripted demo; it is excluded from the real-user count. */
+export const DEPLOYER = "0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3" as Address;
+
 export const WETH_DECIMALS = 18;
 export const USDC_DECIMALS = 6;
 
