@@ -17,11 +17,15 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "@uniswap/v4-core/src/test/PoolModifyLiquidityTest.sol";
+import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
+import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
 import {TripwireExecutor} from "../src/TripwireExecutor.sol";
 import {TripwireReactive} from "../src/TripwireReactive.sol";
 import {ITripwireExecutor} from "../src/interfaces/ITripwireExecutor.sol";
-import {Rule, RuleType, RuleStatus, SkipReason} from "../src/libraries/RuleTypes.sol";
+import {Rule, RuleType, RuleStatus, SkipReason, NO_LOWER, NO_UPPER} from "../src/libraries/RuleTypes.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {PoolMath} from "../src/libraries/PoolMath.sol";
 import {MockSystemContract} from "./mocks/MockSystemContract.sol";
@@ -38,6 +42,8 @@ contract TripwireForkTest is Test {
     IPoolManager constant PM = IPoolManager(0x00B036B58a818B1BC34d502D3fE730Db729e62AC);
     PoolSwapTest constant SWAP_ROUTER = PoolSwapTest(payable(0x9140a78c1A137c7fF1c151EC8231272aF78a99A4));
     PoolModifyLiquidityTest constant LP_ROUTER = PoolModifyLiquidityTest(payable(0x5fa728C0A5cfd51BEe4B060773f50554c0C8A7AB));
+    IPositionManager constant POSM = IPositionManager(0xf969Aee60879C54bAAed9F3eD26147Db216Fd664);
+    IAllowanceTransfer constant PERMIT2 = IAllowanceTransfer(0x000000000022D473030F116dDEE9F6B43aC78BA3);
     address constant CALLBACK_PROXY = 0x775c9B990ADe401060B78D0e98684eEf8d2466C1;
     address constant SYSTEM = 0x8888888888888888888888888888888888888888;
     uint256 constant CHAIN = 1301;
@@ -83,7 +89,7 @@ contract TripwireForkTest is Test {
         vm.etch(SYSTEM, address(new MockSystemContract()).code);
         sys = MockSystemContract(payable(SYSTEM));
         reactive = new TripwireReactive(CHAIN, address(PM), CHAIN);
-        executor = new TripwireExecutor(IPayable(payable(CALLBACK_PROXY)), address(reactive), PM);
+        executor = new TripwireExecutor(IPayable(payable(CALLBACK_PROXY)), address(reactive), PM, POSM);
         reactive.setExecutor(address(executor));
 
         weth.mint(alice, 100 ether);
@@ -97,19 +103,54 @@ contract TripwireForkTest is Test {
         (, t,,) = PM.getSlot0(key.toId());
     }
 
-    /// @dev "Stop-loss: sell WETH if its USDC price falls ~3%" expressed in tick space.
-    ///      If WETH is currency0 the price (USDC per WETH) falls as the tick falls → trigger below.
-    ///      If WETH is currency1 the axis is inverted → trigger above.
-    function _stopLossParams() internal view returns (bool zeroForOne, int24 triggerTick, bool below) {
+    /// @dev Bounds for "WETH price falls by `bps`" (falling=true) or "rises by `bps`" (falling=false),
+    ///      1 tick ≈ 1 bp. If WETH is currency0 the WETH price moves WITH the tick; otherwise against it.
+    function _priceMoveBounds(bool falling, int24 bps) internal view returns (int24 lower, int24 upper) {
+        bool tickDown = falling == wethIs0;
+        (lower, upper) = tickDown ? (_tick() - bps, NO_UPPER) : (NO_LOWER, _tick() + bps);
+    }
+
+    /// @dev "Stop-loss: sell WETH if its USDC price falls ~3%".
+    function _stopLossParams() internal view returns (bool zeroForOne, int24 lower, int24 upper) {
         zeroForOne = wethIs0; // selling WETH
-        below = wethIs0;
-        triggerTick = below ? _tick() - 300 : _tick() + 300;
+        (lower, upper) = _priceMoveBounds(true, 300);
     }
 
     function _createStopLoss(uint128 amount, uint16 slippageBps) internal returns (uint256 id) {
-        (bool z, int24 trig, bool below) = _stopLossParams();
+        (bool z, int24 lower, int24 upper) = _stopLossParams();
         vm.prank(alice);
-        id = executor.createRule(key, RuleType.STOP_LOSS, z, trig, below, amount, slippageBps);
+        id = executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, amount, slippageBps);
+    }
+
+    /// @dev Mint a v4 LP position for alice via the real PositionManager (ERC20 → Permit2 → POSM).
+    function _mintPositionForAlice(int24 tickLower, int24 tickUpper, uint256 liquidity) internal returns (uint256 id) {
+        weth.mint(alice, 1_000 ether);
+        usdc.mint(alice, 3_000_000e6);
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(
+            key, tickLower, tickUpper, liquidity, type(uint128).max, type(uint128).max, alice, bytes("")
+        );
+        params[1] = abi.encode(key.currency0, key.currency1);
+        vm.startPrank(alice);
+        weth.approve(address(PERMIT2), type(uint256).max);
+        usdc.approve(address(PERMIT2), type(uint256).max);
+        PERMIT2.approve(address(weth), address(POSM), type(uint160).max, uint48(block.timestamp + 1 days));
+        PERMIT2.approve(address(usdc), address(POSM), type(uint160).max, uint48(block.timestamp + 1 days));
+        id = POSM.nextTokenId();
+        POSM.modifyLiquidities(abi.encode(actions, params), block.timestamp + 60);
+        vm.stopPrank();
+    }
+
+    /// @dev Alice's LP position on [tick-600, tick+600) (rounded to spacing), guarded by Tripwire.
+    function _createRangeGuard() internal returns (uint256 ruleId, uint256 positionId, int24 tl, int24 tu) {
+        tl = PoolMath.floorToSpacing(_tick(), 60) - 600;
+        tu = PoolMath.floorToSpacing(_tick(), 60) + 600;
+        positionId = _mintPositionForAlice(tl, tu, 1e15);
+        vm.startPrank(alice);
+        IERC721(address(POSM)).approve(address(executor), positionId);
+        ruleId = executor.createRangeGuard(positionId, 100);
+        vm.stopPrank();
     }
 
     /// @dev Sell WETH into the pool to crash its price (the "Crash the price" demo button).
@@ -182,24 +223,27 @@ contract TripwireForkTest is Test {
     }
 
     function test_createRule_rejectsTriggerAlreadyHit() public {
-        (bool z,, bool below) = _stopLossParams();
-        int24 alreadyHit = below ? _tick() + 60 : _tick() - 60;
+        int24 t = _tick();
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.TriggerAlreadyHit.selector, _tick(), alreadyHit));
-        executor.createRule(key, RuleType.STOP_LOSS, z, alreadyHit, below, 1 ether, 100);
+        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.TriggerAlreadyHit.selector, t));
+        executor.createRule(key, RuleType.STOP_LOSS, wethIs0, t + 60, NO_UPPER, 1 ether, 100); // tick <= t+60 now
     }
 
     function test_createRule_validatesInputs() public {
-        (bool z, int24 trig, bool below) = _stopLossParams();
+        (bool z, int24 lower, int24 upper) = _stopLossParams();
         vm.startPrank(alice);
         vm.expectRevert(TripwireExecutor.ZeroAmount.selector);
-        executor.createRule(key, RuleType.STOP_LOSS, z, trig, below, 0, 100);
+        executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 0, 100);
         vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.SlippageTooHigh.selector, 2001, 2000));
-        executor.createRule(key, RuleType.STOP_LOSS, z, trig, below, 1 ether, 2001);
+        executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 1 ether, 2001);
         vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.SlippageTooLow.selector, 10, 50));
-        executor.createRule(key, RuleType.STOP_LOSS, z, trig, below, 1 ether, 10);
+        executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 1 ether, 10);
         vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.UnsupportedRuleType.selector, RuleType.RANGE_GUARD));
-        executor.createRule(key, RuleType.RANGE_GUARD, z, trig, below, 1 ether, 100);
+        executor.createRule(key, RuleType.RANGE_GUARD, z, lower, upper, 1 ether, 100);
+        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.InvalidBounds.selector, NO_LOWER, NO_UPPER));
+        executor.createRule(key, RuleType.STOP_LOSS, z, NO_LOWER, NO_UPPER, 1 ether, 100);
+        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.InvalidBounds.selector, int24(100), int24(-100)));
+        executor.createRule(key, RuleType.STOP_LOSS, z, 100, -100, 1 ether, 100);
         vm.stopPrank();
     }
 
@@ -311,7 +355,7 @@ contract TripwireForkTest is Test {
         _crash(30 ether);
 
         vm.expectEmit(true, false, false, false, address(executor));
-        emit ITripwireExecutor.RuleSkipped(id, SkipReason.SWAP_FAILED, 0, 0);
+        emit ITripwireExecutor.RuleSkipped(id, SkipReason.ACTION_FAILED, 0, 0);
         _callbackFromProxy(id);
 
         assertEq(weth.balanceOf(address(executor)), 60 ether, "deposit intact");
@@ -411,5 +455,145 @@ contract TripwireForkTest is Test {
         assertEq(sys.callbackCount(), 2);
         _callbackFromProxy(id);
         assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Phase 3: TAKE_PROFIT and brackets
+    // ════════════════════════════════════════════════════════════════════════
+
+    function test_takeProfit_sellsAfterPump() public {
+        (int24 lower, int24 upper) = _priceMoveBounds(false, 300); // WETH up ~3%
+        vm.prank(alice);
+        uint256 id = executor.createRule(key, RuleType.TAKE_PROFIT, wethIs0, lower, upper, 1 ether, 100);
+
+        _pump(100_000e6);
+        assertTrue(executor.isTriggered(id));
+        uint256 usdcBefore = usdc.balanceOf(alice);
+        _callbackFromProxy(id);
+
+        assertGt(usdc.balanceOf(alice) - usdcBefore, 3000e6, "sold 1 WETH above the 3000 start price");
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+    }
+
+    function test_bracket_stopSideFires() public {
+        (int24 lowerSL, int24 upperSL) = _priceMoveBounds(true, 300);
+        (int24 lowerTP, int24 upperTP) = _priceMoveBounds(false, 300);
+        // Combine the active side of each: one rule with both a stop and a target.
+        int24 lower = lowerSL != NO_LOWER ? lowerSL : lowerTP;
+        int24 upper = upperSL != NO_UPPER ? upperSL : upperTP;
+        vm.prank(alice);
+        uint256 id = executor.createRule(key, RuleType.STOP_LOSS, wethIs0, lower, upper, 1 ether, 100);
+
+        _crash(30 ether);
+        uint256 usdcBefore = usdc.balanceOf(alice);
+        _callbackFromProxy(id);
+        assertGt(usdc.balanceOf(alice), usdcBefore);
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Phase 3: RANGE_GUARD (LP position withdrawn when it leaves its range)
+    // ════════════════════════════════════════════════════════════════════════
+
+    function test_rangeGuard_takesCustody_andMirrorsRangeBounds() public {
+        (uint256 id, uint256 positionId, int24 tl, int24 tu) = _createRangeGuard();
+        Rule memory r = executor.getRule(id);
+        assertEq(uint8(r.ruleType), uint8(RuleType.RANGE_GUARD));
+        assertEq(r.positionId, positionId);
+        assertEq(r.lowerTick, tl - 1, "fires once tick < tickLower");
+        assertEq(r.upperTick, tu, "fires once tick >= tickUpper");
+        assertEq(IERC721(address(POSM)).ownerOf(positionId), address(executor));
+    }
+
+    function test_rangeGuard_rejectsSomeoneElsesPosition() public {
+        int24 base = PoolMath.floorToSpacing(_tick(), 60);
+        uint256 positionId = _mintPositionForAlice(base - 600, base + 600, 1e15);
+        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.NotPositionOwner.selector, positionId));
+        executor.createRangeGuard(positionId, 100);
+    }
+
+    function test_rangeGuard_rejectsPositionAlreadyOutOfRange() public {
+        int24 base = PoolMath.floorToSpacing(_tick(), 60);
+        uint256 positionId = _mintPositionForAlice(base + 600, base + 1200, 1e15);
+        vm.startPrank(alice);
+        IERC721(address(POSM)).approve(address(executor), positionId);
+        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.TriggerAlreadyHit.selector, _tick()));
+        executor.createRangeGuard(positionId, 100);
+        vm.stopPrank();
+    }
+
+    function test_rangeGuard_cancel_returnsNft() public {
+        (uint256 id, uint256 positionId,,) = _createRangeGuard();
+        vm.prank(alice);
+        executor.cancelRule(id);
+        assertEq(IERC721(address(POSM)).ownerOf(positionId), alice);
+        assertGt(POSM.getPositionLiquidity(positionId), 0, "liquidity untouched");
+    }
+
+    function test_rangeGuard_skipsWhileStillInRange() public {
+        (uint256 id, uint256 positionId,,) = _createRangeGuard();
+        _crash(0.5 ether); // small move, still inside [tl, tu)
+        vm.expectEmit(true, false, false, false, address(executor));
+        emit ITripwireExecutor.RuleSkipped(id, SkipReason.CONDITION_NOT_MET, 0, 0);
+        _callbackFromProxy(id);
+        assertEq(IERC721(address(POSM)).ownerOf(positionId), address(executor));
+    }
+
+    function test_rangeGuard_withdrawsWhenPriceLeavesRange() public {
+        (uint256 id, uint256 positionId,,) = _createRangeGuard();
+        uint128 liqBefore = POSM.getPositionLiquidity(positionId);
+        assertGt(liqBefore, 0);
+
+        _crash(30 ether); // ~ -3000 ticks: far outside a ±600-tick range
+        assertTrue(executor.isTriggered(id));
+
+        uint256 w0 = weth.balanceOf(alice);
+        uint256 u0 = usdc.balanceOf(alice);
+        uint256 g = gasleft();
+        _callbackFromProxy(id);
+        emit log_named_uint("range guard execute() gas", g - gasleft());
+
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+        assertEq(POSM.getPositionLiquidity(positionId), 0, "all liquidity withdrawn");
+        assertEq(IERC721(address(POSM)).ownerOf(positionId), alice, "empty NFT handed back");
+        // Price of WETH fell, so the position ended up fully in WETH (LPs buy the falling asset).
+        assertGt(weth.balanceOf(alice), w0, "received WETH");
+        assertEq(usdc.balanceOf(alice), u0, "no USDC left in an out-of-range-below position");
+    }
+
+    function test_fullLoop_rangeGuard() public {
+        vm.recordLogs();
+        (uint256 id, uint256 positionId,,) = _createRangeGuard();
+        _deliverRecorded(uint256(keccak256("tx:createRangeGuard")));
+        assertEq(reactive.rulesOf(poolId).length, 1);
+
+        // In-range churn: no callback.
+        vm.recordLogs();
+        _crash(0.5 ether);
+        _deliverRecorded(uint256(keccak256("tx:small")));
+        assertEq(sys.callbackCount(), 0);
+
+        // Price leaves the range → reactive requests the callback.
+        vm.recordLogs();
+        _crash(30 ether);
+        _deliverRecorded(uint256(keccak256("tx:out-of-range")));
+        assertEq(sys.callbackCount(), 1);
+
+        MockSystemContract.CallbackReq memory cb = sys.callbackAt(0);
+        bytes memory payload = cb.payload;
+        address injected = address(reactive);
+        assembly {
+            mstore(add(payload, 36), injected)
+        }
+        vm.recordLogs();
+        vm.prank(CALLBACK_PROXY);
+        (bool ok,) = address(executor).call{gas: cb.gasLimit}(payload);
+        assertTrue(ok);
+        assertEq(POSM.getPositionLiquidity(positionId), 0);
+        assertEq(IERC721(address(POSM)).ownerOf(positionId), alice);
+
+        _deliverRecorded(uint256(keccak256("tx:callback")));
+        assertEq(reactive.rulesOf(poolId).length, 0, "mirror cleared, pool unwatched");
+        id;
     }
 }

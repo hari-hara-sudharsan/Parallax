@@ -6,7 +6,7 @@ import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {AbstractPayer} from "reactive-lib-omni/base/AbstractPayer.sol";
 import {TripwireReactive} from "../src/TripwireReactive.sol";
 import {ITripwireExecutor} from "../src/interfaces/ITripwireExecutor.sol";
-import {RuleType, SkipReason} from "../src/libraries/RuleTypes.sol";
+import {RuleType, SkipReason, NO_LOWER, NO_UPPER} from "../src/libraries/RuleTypes.sol";
 import {MockSystemContract} from "./mocks/MockSystemContract.sol";
 
 /// @notice Unit tests of TripwireReactive's decision logic with hand-built LogRecords (no chain needed).
@@ -48,13 +48,20 @@ contract TripwireReactiveTest is Test {
         r.txHash = uint256(keccak256(abi.encode(t0, t1, data)));
     }
 
-    function _ruleCreated(uint256 ruleId, bytes32 poolId, int24 triggerTick, bool below)
+    /// @dev Matches the executor's RuleCreated layout: data = (ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId).
+    function _ruleCreated(uint256 ruleId, bytes32 poolId, int24 lowerTick, int24 upperTick)
         internal
         view
         returns (IReactive.LogRecord memory)
     {
-        bytes memory data = abi.encode(RuleType.STOP_LOSS, triggerTick, below, true, uint128(1 ether));
+        bytes memory data =
+            abi.encode(RuleType.STOP_LOSS, lowerTick, upperTick, true, uint128(1 ether), uint256(0));
         return _log(EXECUTOR, 4, reactive.RULE_CREATED_TOPIC0(), ruleId, uint160(address(this)), uint256(poolId), data);
+    }
+
+    /// @dev Stop-loss style: fire when tick <= trigger.
+    function _stop(uint256 ruleId, bytes32 poolId, int24 trigger) internal view returns (IReactive.LogRecord memory) {
+        return _ruleCreated(ruleId, poolId, trigger, NO_UPPER);
     }
 
     function _swap(bytes32 poolId, int24 tick) internal view returns (IReactive.LogRecord memory) {
@@ -121,12 +128,12 @@ contract TripwireReactiveTest is Test {
 
     function test_ruleCreated_mirrorsRule_andWatchesPool() public {
         assertFalse(_poolSubscribed(POOL));
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
 
-        (bytes32 poolId, int24 trig, bool below, bool exists, uint64 pending,) = reactive.mirror(1);
+        (bytes32 poolId, int24 lower, int24 upper, bool exists, uint64 pending,) = reactive.mirror(1);
         assertEq(poolId, POOL);
-        assertEq(trig, -100);
-        assertTrue(below);
+        assertEq(lower, -100);
+        assertEq(upper, NO_UPPER);
         assertTrue(exists);
         assertEq(pending, 0);
         assertTrue(_poolSubscribed(POOL), "pool should be subscribed on first rule");
@@ -134,24 +141,24 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_ruleCreated_duplicateDeliveryIgnored() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         uint256 subsBefore = sys.subCount();
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         assertEq(reactive.rulesOf(POOL).length, 1);
         assertEq(sys.subCount(), subsBefore);
     }
 
     function test_secondRuleSamePool_noExtraSubscription() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         uint256 subsBefore = sys.subCount();
-        _react(_ruleCreated(2, POOL, -200, true));
+        _react(_stop(2, POOL, -200));
         assertEq(sys.subCount(), subsBefore);
         assertEq(reactive.rulesOf(POOL).length, 2);
     }
 
     function test_cancel_removesRule_andUnwatchesEmptyPool() public {
-        _react(_ruleCreated(1, POOL, -100, true));
-        _react(_ruleCreated(2, POOL, -200, true));
+        _react(_stop(1, POOL, -100));
+        _react(_stop(2, POOL, -200));
 
         _react(_executorEvent(reactive.RULE_CANCELLED_TOPIC0(), 1));
         uint256[] memory left = reactive.rulesOf(POOL);
@@ -169,13 +176,13 @@ contract TripwireReactiveTest is Test {
     // ── Trigger logic ───────────────────────────────────────────────────────
 
     function test_swapAboveStop_noCallback() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -99));
         assertEq(sys.callbackCount(), 0);
     }
 
     function test_swapCrossingStop_requestsCallback() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         IReactive.LogRecord memory s = _swap(POOL, -150);
         _react(s);
 
@@ -193,7 +200,7 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_takeProfitDirection_triggersAbove() public {
-        _react(_ruleCreated(1, POOL, 500, false));
+        _react(_ruleCreated(1, POOL, NO_LOWER, 500));
         _react(_swap(POOL, 499));
         assertEq(sys.callbackCount(), 0);
         _react(_swap(POOL, 500)); // inclusive
@@ -201,20 +208,20 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_swapInOtherPool_ignored() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         _react(_swap(OTHER_POOL, -1000));
         assertEq(sys.callbackCount(), 0);
     }
 
     function test_pendingRule_notRefiredOnNextSwap() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -150));
         _react(_swap(POOL, -160));
         assertEq(sys.callbackCount(), 1, "one in-flight callback per rule");
     }
 
     function test_skipped_rearmsRule() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -150));
         _react(_executorEvent(reactive.RULE_SKIPPED_TOPIC0(), 1));
         (,,,, uint64 pending,) = reactive.mirror(1);
@@ -224,7 +231,7 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_pendingTimeout_rearmsByTimestamp() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -150));
         vm.warp(block.timestamp + reactive.PENDING_TIMEOUT() - 1);
         _react(_swap(POOL, -150));
@@ -235,7 +242,7 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_executed_removesRule_noMoreCallbacks() public {
-        _react(_ruleCreated(1, POOL, -100, true));
+        _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -150));
         _react(_executorEvent(reactive.RULE_EXECUTED_TOPIC0(), 1));
         assertEq(reactive.rulesOf(POOL).length, 0);
@@ -245,7 +252,7 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_callbacksPerEventAreCapped() public {
-        for (uint256 i = 1; i <= 8; ++i) _react(_ruleCreated(i, POOL, -100, true));
+        for (uint256 i = 1; i <= 8; ++i) _react(_stop(i, POOL, -100));
         _react(_swap(POOL, -150));
         assertEq(sys.callbackCount(), reactive.MAX_CALLBACKS_PER_EVENT());
         assertEq(sys.callbackCount(), 3);
@@ -255,7 +262,7 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_gas_fullPoolSwapStaysFarBelowReactiveCap() public {
-        for (uint256 i = 1; i <= 25; ++i) _react(_ruleCreated(i, POOL, -100, true));
+        for (uint256 i = 1; i <= 25; ++i) _react(_stop(i, POOL, -100));
         IReactive.LogRecord memory s = _swap(POOL, -150);
         vm.prank(SYSTEM);
         uint256 g = gasleft();
@@ -264,6 +271,32 @@ contract TripwireReactiveTest is Test {
         // Upper bound: the mock system contract stores every payload in storage, the real one is cheaper.
         emit log_named_uint("react() gas, 25 rules, 3 callbacks (pessimistic)", used);
         assertLt(used, 900_000, "Reactive tx gas cap is 900k");
+    }
+
+    // ── Two-sided rules: LP range guard [tickLower, tickUpper) and brackets ──
+
+    /// @dev A position on [-600, 600) is mirrored as lower = -601, upper = 600.
+    function test_rangeGuard_firesOnlyWhenLeavingRange() public {
+        _react(_ruleCreated(1, POOL, -601, 600));
+        _react(_swap(POOL, -600)); // still in range (tickLower is inclusive)
+        _react(_swap(POOL, 0));
+        _react(_swap(POOL, 599)); //  still in range
+        assertEq(sys.callbackCount(), 0);
+        _react(_swap(POOL, 600)); //  tickUpper is exclusive → out of range
+        assertEq(sys.callbackCount(), 1);
+    }
+
+    function test_rangeGuard_firesBelowRange() public {
+        _react(_ruleCreated(1, POOL, -601, 600));
+        _react(_swap(POOL, -601));
+        assertEq(sys.callbackCount(), 1);
+    }
+
+    function test_bracket_firesOnEitherSide() public {
+        _react(_ruleCreated(1, POOL, -100, 100)); // stop-loss + take-profit in one rule
+        _react(_ruleCreated(2, POOL, -100, 100));
+        _react(_swap(POOL, 150)); // rule 1 and 2 both fire on the upside
+        assertEq(sys.callbackCount(), 2);
     }
 
     // ── Robustness: never revert on unexpected input (reverts are billed) ──
