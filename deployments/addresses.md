@@ -65,8 +65,11 @@ Scripts write these automatically to `contracts/deployments/<chainId>.json`; cop
 
 | Contract | Chain | Address | Tx |
 |---|---|---|---|
-| MockWETH (mWETH) | Unichain Sepolia | _pending_ | |
-| MockUSDC (mUSDC) | Unichain Sepolia | _pending_ | |
-| Demo pool (poolId) | Unichain Sepolia | _pending_ | |
-| TripwireReactive | Lasna | _pending_ | |
-| TripwireExecutor | Unichain Sepolia | _pending_ | |
+| MockWETH (mWETH) | Unichain Sepolia | [`0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5`](https://sepolia.uniscan.xyz/address/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) | |
+| MockUSDC (mUSDC) | Unichain Sepolia | [`0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c`](https://sepolia.uniscan.xyz/address/0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c) | |
+| Demo pool mUSDC/mWETH 0.3% (poolId) | Unichain Sepolia | `0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c` | |
+| TripwireReactive | Lasna | [`0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5`](https://lasna.reactscan.net/address/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) | |
+| TripwireExecutor | Unichain Sepolia | [`0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9`](https://sepolia.uniscan.xyz/address/0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9) | |
+
+Deployer: `0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3`. (TripwireReactive and MockWETH share an address because each was the
+deployer's first contract (nonce 0) on its own chain.)
