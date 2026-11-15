@@ -16,5 +16,5 @@ export const chainClients: Record<ChainKey, PublicClient> = {
 
 export const lasnaClient = createPublicClient({
   chain: lasna,
-  transport: http(process.env.NEXT_PUBLIC_LASNA_RPC ?? "https://lasna-rpc.rnk.dev/"),
+  transport: http(process.env.NEXT_PUBLIC_LASNA_RPC ?? "https://lasna-rpc.rnk.dev/", { timeout: 4_000, retryCount: 1 }),
 });

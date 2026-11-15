@@ -1,9 +1,8 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Parallax design tokens. Dark, precise, trading-desk feel: one neutral ramp + one colour per
- * rule state, so colour always means the same thing:
- *   active = blue · triggered (in flight) = amber · executed = green · cancelled = grey · danger = red
+ * Parallax design tokens ("data terminal" app style; values in globals.css). Colour means one thing each:
+ *   active = the accent (selection lines, rule levels) · triggered = in flight · executed = done · danger = bad
  */
 export default {
   content: ["./src/components/**/*.{ts,tsx}", "./src/app/**/*.{ts,tsx}"],
@@ -14,6 +13,8 @@ export default {
         panel: "rgb(var(--panel) / <alpha-value>)",
         raised: "rgb(var(--raised) / <alpha-value>)",
         line: "rgb(var(--line) / <alpha-value>)",
+        rule: "rgb(var(--rule) / <alpha-value>)",
+        control: "rgb(var(--control) / <alpha-value>)",
         ink: "rgb(var(--ink) / <alpha-value>)",
         muted: "rgb(var(--muted) / <alpha-value>)",
         faint: "rgb(var(--faint) / <alpha-value>)",
@@ -23,8 +24,8 @@ export default {
         danger: "rgb(var(--danger) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+        sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       keyframes: {
         "pulse-ring": {

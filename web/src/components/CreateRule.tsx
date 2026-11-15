@@ -12,7 +12,7 @@ import { chainClients } from "@/lib/clients";
 import { useChain } from "@/hooks/useChain";
 import { WETH_DECIMALS, WETH_IS_CURRENCY0, poolKeyOf, type ChainDeployment } from "@/lib/deployment";
 import { boundsForPrice, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
-import { Button, Field, Panel, TxLink, cx, inputClass } from "./ui";
+import { Button, Field, Panel, Segmented, TxLink, cx, inputClass } from "./ui";
 
 type Tab = "stop" | "take" | "trail" | "range";
 const TABS: { id: Tab; label: string; blurb: string }[] = [
@@ -27,23 +27,15 @@ export function CreateRule() {
   const [tab, setTab] = useState<Tab>("stop");
   return (
     <Panel title="Create a rule">
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={cx(
-              "rounded-lg px-2 py-2 text-[13px] font-medium transition",
-              tab === t.id ? "bg-raised text-ink shadow-sm ring-1 ring-line" : "text-muted hover:text-ink",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <p className="mt-3 text-xs text-faint">{TABS.find((t) => t.id === tab)!.blurb}</p>
+      <Segmented<Tab>
+        label="Rule type"
+        options={TABS.map((t) => t.id)}
+        value={tab}
+        onChange={setTab}
+        render={(id) => TABS.find((t) => t.id === id)!.label}
+        className="overflow-x-auto"
+      />
+      <p className="mt-3 text-[13px] text-muted">{TABS.find((t) => t.id === tab)!.blurb}</p>
       <div className="mt-5">
         {tab === "range" ? <RangeGuardForm /> : tab === "trail" ? <TrailingForm /> : <PriceRuleForm kind={tab} key={tab} />}
       </div>
@@ -120,14 +112,14 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
         <div className="relative">
           <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint">$</span>
           <input
-            className={cx(inputClass, "pl-7", wrongSide && "border-danger/60")}
+            className={cx(inputClass, "pl-7", wrongSide && "ring-danger")}
             inputMode="decimal"
             type="number"
             value={trigger}
             onChange={(e) => setTrigger(e.target.value)}
           />
           {movePct !== undefined && (
-            <span className={cx("num absolute right-3.5 top-1/2 -translate-y-1/2 text-xs", movePct < 0 ? "text-danger" : "text-executed")}>
+            <span className={cx("num absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px]", movePct < 0 ? "text-danger" : "text-executed")}>
               {movePct > 0 ? "+" : ""}
               {movePct.toFixed(1)}%
             </span>
@@ -138,23 +130,12 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="Amount" hint={weth !== undefined ? `bal ${fmtToken(weth, 3)}` : undefined}>
           <div className="relative">
-            <input className={cx(inputClass, "pr-16", insufficient && "border-danger/60")} inputMode="decimal" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-faint">mWETH</span>
+            <input className={cx(inputClass, "pr-16", insufficient && "ring-danger")} inputMode="decimal" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] text-faint">mWETH</span>
           </div>
         </Field>
         <Field label="Max slippage">
-          <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
-            {SLIPPAGE.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSlippage(s)}
-                className={cx("num rounded-lg text-xs transition", slippage === s ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}
-              >
-                {s / 100}%
-              </button>
-            ))}
-          </div>
+          <Segmented<number> label="Max slippage" options={SLIPPAGE} value={slippage} onChange={setSlippage} render={(v) => <span className="num">{v / 100}%</span>} />
         </Field>
       </div>
 
@@ -242,30 +223,18 @@ function TrailingForm() {
   return (
     <div className="space-y-4">
       <Field label="Trail distance" hint={price ? `now $${fmtUsd(price)}` : undefined}>
-        <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
-          {TRAILS.map((t) => (
-            <button key={t} type="button" onClick={() => setTrail(t)} className={cx("num rounded-lg text-xs transition", trail === t ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}>
-              {t / 100}%
-            </button>
-          ))}
-        </div>
+        <Segmented<number> label="Trail distance" options={TRAILS} value={trail} onChange={setTrail} render={(v) => <span className="num">{v / 100}%</span>} />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Amount" hint={weth !== undefined ? `bal ${fmtToken(weth, 3)}` : undefined}>
           <div className="relative">
-            <input className={cx(inputClass, "pr-16", insufficient && "border-danger/60")} inputMode="decimal" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-faint">mWETH</span>
+            <input className={cx(inputClass, "pr-16", insufficient && "ring-danger")} inputMode="decimal" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[12px] text-faint">mWETH</span>
           </div>
         </Field>
         <Field label="Max slippage">
-          <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
-            {SLIPPAGE.map((s) => (
-              <button key={s} type="button" onClick={() => setSlippage(s)} className={cx("num rounded-lg text-xs transition", slippage === s ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}>
-                {s / 100}%
-              </button>
-            ))}
-          </div>
+          <Segmented<number> label="Max slippage" options={SLIPPAGE} value={slippage} onChange={setSlippage} render={(v) => <span className="num">{v / 100}%</span>} />
         </Field>
       </div>
 
@@ -411,9 +380,9 @@ function RangeGuardForm() {
       </Field>
 
       {pos && (
-        <div className="rounded-xl border border-line bg-bg p-4">
+        <div className="rounded-[6px] bg-raised p-4">
           <RangeBar lo={pos.tickLower} hi={pos.tickUpper} tick={tick} />
-          <div className="mt-3 flex items-center justify-between text-xs">
+          <div className="mt-3 flex items-center justify-between text-[12px]">
             <span className="num text-muted">
               ${fmtUsd(pLo!)} – ${fmtUsd(pHi!)}
             </span>
@@ -422,11 +391,11 @@ function RangeGuardForm() {
         </div>
       )}
 
-      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-bg p-3.5">
+      <label className="flex cursor-pointer items-start gap-3 rounded-[6px] bg-raised p-3.5">
         <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[rgb(var(--executed))]" checked={recenter} onChange={(e) => setRecenter(e.target.checked)} />
         <span className="text-[13px] leading-snug">
           <span className="font-medium text-ink">Re-centre automatically</span>
-          <span className="block text-xs text-muted">
+          <span className="block text-[12px] text-muted">
             When the price leaves your range, re-open the same-width position around the new price and keep guarding it.
             Off = just withdraw everything to you.
           </span>
@@ -434,13 +403,7 @@ function RangeGuardForm() {
       </label>
 
       <Field label="Max slippage">
-        <div className="grid h-11 grid-cols-4 gap-1 rounded-xl border border-line bg-bg p-1">
-          {SLIPPAGE.map((s) => (
-            <button key={s} type="button" onClick={() => setSlippage(s)} className={cx("num rounded-lg text-xs transition", slippage === s ? "bg-raised text-ink ring-1 ring-line" : "text-muted hover:text-ink")}>
-              {s / 100}%
-            </button>
-          ))}
-        </div>
+        <Segmented<number> label="Max slippage" options={SLIPPAGE} value={slippage} onChange={setSlippage} render={(v) => <span className="num">{v / 100}%</span>} />
       </Field>
 
       <Preview>
@@ -496,7 +459,7 @@ function RangeBar({ lo, hi, tick }: { lo: number; hi: number; tick?: number }) {
 
 function Preview({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-line px-4 py-3 text-[13px] leading-relaxed text-muted">{children}</div>
+    <div className="rounded-[6px] bg-raised px-4 py-3 text-[14px] leading-relaxed text-ink">{children}</div>
   );
 }
 
@@ -523,11 +486,11 @@ function SubmitRow({
         {pendingLabel ?? label}
       </Button>
       {s.status === "done" && (
-        <p className="text-xs text-executed">
-          Armed ✓ <TxLink href={chain.explorerTx(s.hash)} hash={s.hash} />. Reactive mirrors it within a few seconds.
+        <p className="text-[12px] text-executed">
+          Armed: <TxLink href={chain.explorerTx(s.hash)} hash={s.hash} />. Reactive mirrors it within a few seconds.
         </p>
       )}
-      {s.status === "error" && <p className="text-xs text-danger">{s.message}</p>}
+      {s.status === "error" && <p className="text-[12px] text-danger">{s.message}</p>}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { decodeEventLog, toHex, type Address, type Hex } from "viem";
 import { parallaxVaultAbi, parallaxVaultReactiveAbi, stateViewAbi } from "@/lib/abis";
 import { chainClients, lasnaClient } from "@/lib/clients";
 import { CHAINS, VAULT } from "@/lib/deployment";
+import { storedVaultAction } from "@/lib/proofs";
 
 /**
  * Parallax Vault, read straight from chain (no indexer):
@@ -136,7 +137,8 @@ export function useVaultHistory() {
     queryKey: ["vault-history"],
     refetchInterval: 15_000,
     queryFn: async (): Promise<VaultEvent[]> => {
-      const [logs, requests] = await Promise.all([vaultLogs(), brainRequests()]);
+      const lasnaWithin3s = Promise.race([brainRequests(), new Promise<Awaited<ReturnType<typeof brainRequests>>>((r) => setTimeout(() => r([]), 3_000))]);
+      const [logs, requests] = await Promise.all([vaultLogs(), lasnaWithin3s]);
       const events: VaultEvent[] = [];
       for (const l of logs) {
         let d;
@@ -169,6 +171,9 @@ export function useVaultHistory() {
       answers.forEach((e, i) => {
         const r = requests[i];
         if (r && r.action === e.reason) Object.assign(e, { reactiveTx: r.tx, originTx: r.originTx });
+        // Lasna unreachable or pruned: the loop frozen by `npm run snapshot`.
+        const stored = storedVaultAction(e.tx);
+        if (!e.reactiveTx && stored) Object.assign(e, { reactiveTx: stored.reactiveTx, originTx: stored.originTx });
       });
       await Promise.all(
         answers

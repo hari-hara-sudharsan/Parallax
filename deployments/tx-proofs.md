@@ -150,6 +150,24 @@ evacuation. Both Lasna txs were decoded on-chain: `VaultActionRequested(EVACUATE
 
 ---
 
+## Run: a user's journey, end to end (`npm run journey`), Base Sepolia, 2026-11-15
+
+`web/scripts/journey.mjs` makes exactly the contract calls the dashboard makes when someone clicks through it, from a
+wallet, with the same ABIs. Nothing but that wallet sends anything; Reactive Network does the rest.
+
+| Step | Tx | Result |
+|---|---|---|
+| Get test tokens | [`0x73526dd0…981531cb`](https://sepolia.basescan.org/tx/0x73526dd0e0725dc4145aca3ad98800da9fe8b56aca52bf7f2af68198981531cb), [`0xf1c1ecfd…05ea815b`](https://sepolia.basescan.org/tx/0xf1c1ecfda76f728e39d13e5bda9c2571ce29d4ac22875e88517781f605ea815b) | 5 mWETH + 10,000 mUSDC |
+| Arm a stop-loss (approve, `createRule`) | [`0x4f47af76…00204ac4`](https://sepolia.basescan.org/tx/0x4f47af769dc6475daeb44e4e0980a551de431335f69391678f41768a00204ac4), [`0xae8ee7a3…77d7a258`](https://sepolia.basescan.org/tx/0xae8ee7a3ecdebeb0e583dce89c31157e96efe0ee38bc601234b1a52f77d7a258) | rule #2: sell 0.5 mWETH 0.4% below the price |
+| **① The market moves** (sell 2 mWETH) | [`0xf0e6ecf8…5e01ce30`](https://sepolia.basescan.org/tx/0xf0e6ecf88c11b76bb32333bee710d0c6f1548301e6a91c85b51c46425e01ce30) · block 59173661 | tick 200637 → 200709 |
+| **③ Parallax executes** (Reactive callback) | [`0x27baf923…65da5a64`](https://sepolia.basescan.org/tx/0x27baf923b48add0d51006ac1c8bd054b6f463617cacc504982571bc865da5a64) · block 59173671 | **10 blocks ≈ 2.0 s**; paid **957.21 mUSDC** for 0.5 mWETH; the record names the swap above as origin |
+| Vault deposit (approve ×2, `deposit`) | [`0xa0558511…a0ed0ee8`](https://sepolia.basescan.org/tx/0xa055851163de6d44c1950ff1dc9202cb5203be816ccd552fd58d1fcba0ed0ee8) | 0.2 mWETH + 400 mUSDC → pxLP shares |
+| Vault withdraw (this run's shares only) | [`0x0e7689aa…dceea23f`](https://sepolia.basescan.org/tx/0x0e7689aae83a98388c97706e06addeb5042bb07c27a4b44857f06926dceea23f) | back out; about +$1.40 net at the pool price (rebalanced to the range's ratio) |
+
+The Lasna reactive tx for rule #2 is filled in by `npm run snapshot` on a network that can reach Lasna.
+
+---
+
 ## How to add a row
 
 ```bash

@@ -2,41 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tokens as RGB triplets so Tailwind opacity modifiers work (bg-panel/60 etc.). */
+/*
+ * Tokens from the "data terminal" app style (dark, long sessions): cards darker than the ground,
+ * elevation by lightness, colour only on data and status, and every selection a 1px accent line.
+ * RGB triplets so Tailwind opacity modifiers work (bg-panel/60 etc.).
+ */
 :root {
-  --bg: 9 11 14;
-  --panel: 16 19 24;
-  --raised: 23 27 34;
-  --line: 34 40 49;
-  --ink: 232 235 239;
-  --muted: 142 150 163;
-  --faint: 92 100 113;
-  --active: 104 157 255;
-  --triggered: 245 181 68;
-  --executed: 61 220 151;
-  --danger: 255 99 99;
+  --bg: 23 23 25;        /* #171719 ground */
+  --panel: 19 18 23;     /* #131217 card, darker than the ground */
+  --raised: 33 32 35;    /* #212023 nested well */
+  --line: 34 34 36;      /* #222224 structural line */
+  --rule: 27 26 31;      /* #1b1a1f row rule */
+  --control: 58 58 62;   /* #3a3a3e control outline */
+  --ink: 255 255 255;
+  --muted: 138 140 146;  /* #8a8c92, 5.3:1 on the card */
+  --faint: 125 127 134;  /* #7d7f86, 4.6:1 on the card */
+  --active: 74 138 214;  /* #4a8ad6 the one accent: a 1px selection line, and rule levels on data */
+  --triggered: 217 164 65;  /* in flight */
+  --executed: 95 195 156;   /* done / positive */
+  --danger: 229 86 111;     /* negative */
   color-scheme: dark;
 }
 
 body {
   background: rgb(var(--bg));
   color: rgb(var(--ink));
-  font-feature-settings: "ss01", "cv11";
+  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 20px;
 }
 
-/* Numbers never jiggle while ticking. */
+/* Every figure, hash and block count in JetBrains Mono: on-chain numbers must stack digit for digit. */
 .num {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
-/* Subtle grid backdrop behind the hero, which reads as an instrument. */
-.grid-bg {
-  background-image:
-    linear-gradient(rgb(var(--line) / 0.35) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--line) / 0.35) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
+:focus-visible {
+  outline: 1px solid rgb(var(--active));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 input[type="number"]::-webkit-inner-spin-button,

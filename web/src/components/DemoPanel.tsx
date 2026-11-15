@@ -74,15 +74,15 @@ export function DemoPanel() {
   };
 
   return (
-    <Panel title="Demo controls" aside={<span className="text-[11px] uppercase tracking-widest text-faint">testnet</span>}>
-      <div className="flex items-center justify-between rounded-xl border border-line bg-bg px-4 py-3 text-xs">
-        <span className="text-muted">Your demo balance</span>
+    <Panel title="Demo controls" aside={<span className="text-[12px] text-faint">{chain.name}</span>}>
+      <div className="flex items-center justify-between gap-3 rounded-[6px] bg-raised px-4 py-3 text-[12px]">
+        <span className="text-muted">Your test balance</span>
         <span className="num text-ink">
           {weth !== undefined ? fmtToken(weth, 3) : "–"} mWETH · {usdc !== undefined ? fmtToken(usdc, 0) : "–"} mUSDC
         </span>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+      <div className="mt-4 grid grid-cols-2 gap-2 [&>button:first-child]:col-span-2">
         <Button
           variant="ghost"
           disabled={!address || faucet.busy}
@@ -104,7 +104,7 @@ export function DemoPanel() {
             after();
           }}
         >
-          {crash.state.status === "running" ? `${crash.state.step}…` : "▼ Crash the price"}
+          {crash.state.status === "running" ? `${crash.state.step}…` : "Crash −12%"}
         </Button>
         <Button
           variant="ghost"
@@ -114,11 +114,11 @@ export function DemoPanel() {
             after();
           }}
         >
-          {pump.state.status === "running" ? `${pump.state.step}…` : "▲ Pump the price"}
+          {pump.state.status === "running" ? `${pump.state.step}…` : "Pump +12%"}
         </Button>
       </div>
 
-      <div className="mt-3 space-y-1 text-xs">
+      <div className="mt-3 space-y-1 text-[12px]">
         {[crash, pump].map((f, i) =>
           f.state.status === "done" ? (
             <p key={i} className="text-muted">
@@ -131,9 +131,8 @@ export function DemoPanel() {
         {faucet.state.status === "error" && <p className="text-danger">{faucet.state.message}</p>}
       </div>
 
-      <p className="mt-4 text-[11px] leading-relaxed text-faint">
-        Crash sells 20 mWETH (about −12%); pump sells 60,000 mUSDC (about +12%). Both are ordinary Uniswap v4 swaps that anyone
-        could make, and Parallax reacts to them exactly like it would to a real market move.
+      <p className="mt-4 text-[12px] leading-relaxed text-faint">
+        Crash sells 20 mWETH, pump sells 60,000 mUSDC: ordinary Uniswap v4 swaps, handled like any real market move.
       </p>
     </Panel>
   );

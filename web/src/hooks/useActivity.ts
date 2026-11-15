@@ -5,6 +5,7 @@ import { toHex, type Address, type Hex } from "viem";
 import { parallaxExecutorAbi, parallaxReactiveAbi } from "@/lib/abis";
 import { chainClients, lasnaClient } from "@/lib/clients";
 import { CHAIN_LIST, REACTIVE, type ChainDeployment, type ChainKey } from "@/lib/deployment";
+import { PROOFS, storedExecution } from "@/lib/proofs";
 
 /**
  * One Parallax execution, followed across chains:
@@ -26,6 +27,7 @@ export type FeedItem = {
   originBlock?: number;
   t0?: number;
   reactiveTx?: Hex;
+  reactiveAt?: number; // Lasna block timestamp of the reactive tx (s), when Lasna is readable
   callbackTx?: Hex;
   executedBlock?: number;
   t1?: number;
@@ -48,6 +50,8 @@ const LASNA_TAIL = 300n;
 const finalStatus = new Map<string, number>(); //  chain:ruleId → 2 executed / 3 cancelled
 const records = new Map<string, ExecRecord>();
 const enriched = new Map<string, Partial<FeedItem>>();
+const partial = new Map<string, Partial<FeedItem>>(); // best effort so far, retried until complete
+const inFlight = new Set<string>();
 const blockTs = new Map<string, number>();
 
 const k = (c: ChainKey, id: bigint) => `${c}:${id}`;
@@ -103,9 +107,26 @@ async function enrich(chain: ChainDeployment, ruleId: bigint, rec: ExecRecord): 
     });
     if (log) Object.assign(out, { callbackTx: log.transactionHash, owner: log.args.owner, amount0Out: log.args.amount0Out, amount1Out: log.args.amount1Out });
     out.t0 = await timestampOf(chain.key, rec.originBlock);
-    out.reactiveTx = await findReactiveTx(chain, ruleId, out.t0);
+    partial.set(id, { ...out }); // the Base side is ready; show it while Lasna is looked up
   } catch {
     return out; // retried next poll
+  }
+  try {
+    out.reactiveTx = await findReactiveTx(chain, ruleId, out.t0);
+  } catch {
+    /* Lasna unreachable or pruned: fall back to the stored proof below */
+  }
+  // Lasna prunes old blocks: use the loop frozen by `npm run snapshot` when the live lookup finds nothing.
+  const stored = storedExecution(chain.key, ruleId);
+  if (!out.reactiveTx && stored?.reactiveTx) out.reactiveTx = stored.reactiveTx;
+  if (!out.callbackTx && stored?.callbackTx) out.callbackTx = stored.callbackTx;
+  if (out.reactiveTx) {
+    try {
+      const rc = await lasnaClient.getTransactionReceipt({ hash: out.reactiveTx });
+      out.reactiveAt = await lasnaTimestamp(rc.blockNumber);
+    } catch {
+      /* position on the loop strip is optional */
+    }
   }
   if (out.callbackTx && out.reactiveTx) enriched.set(id, out);
   return out;
@@ -184,56 +205,95 @@ async function loadActivity(): Promise<Activity> {
   }
   executed.sort((a, b) => (b.t1 ?? 0) - (a.t1 ?? 0));
 
+  // Stats over every proven loop: the live executors' records plus the stored ones (benchmark rounds and
+  // earlier live runs), one row per origin swap. Block counts are exact either way.
   const stats = Object.fromEntries(
     CHAIN_LIST.map((c) => {
-      const xs = executed.filter((e) => e.chain === c.key);
-      const b = xs.map((e) => e.latencyBlocks!);
-      const s = xs.map((e) => e.latencySeconds!);
-      return [c.key, { n: xs.length, p50Blocks: pct(b, 50), p50Seconds: pct(s, 50), minSeconds: s.length ? Math.min(...s) : undefined }];
+      const byOrigin = new Map<string, number>();
+      for (const e of [...PROOFS.executions, ...PROOFS.bench]) if (e.chain === c.key) byOrigin.set(e.originTx.toLowerCase(), e.latencyBlocks);
+      for (const e of executed) if (e.chain === c.key) byOrigin.set(e.originTx.toLowerCase(), e.latencyBlocks!);
+      const b = [...byOrigin.values()];
+      const s = b.map((x) => (x * c.blockMs) / 1000);
+      return [c.key, { n: b.length, p50Blocks: pct(b, 50), p50Seconds: pct(s, 50), minSeconds: s.length ? Math.min(...s) : undefined }];
     }),
   ) as Record<ChainKey, ChainStats>;
 
   // Enrich only the newest rows with tx hashes.
   const newest = executed.slice(0, ENRICH_NEWEST);
-  await Promise.all(
-    newest.map(async (it) => {
-      const chain = CHAIN_LIST.find((c) => c.key === it.chain)!;
-      Object.assign(it, await enrich(chain, it.ruleId, records.get(it.key)!));
-    }),
-  );
-
-  // In-flight rows: Lasna fired but the callback hasn't landed yet.
-  const reacting: FeedItem[] = [];
-  try {
-    const latest = await lasnaClient.getBlockNumber();
-    const trig = await lasnaClient.getContractEvents({
-      address: REACTIVE.address,
-      abi: parallaxReactiveAbi,
-      eventName: "RuleTriggered",
-      fromBlock: latest - LASNA_TAIL,
-      toBlock: latest,
-    });
-    for (const l of trig) {
-      const chain = CHAIN_LIST.find((c) => BigInt(c.chainId) === l.args.chainId);
-      if (!chain || finalStatus.has(k(chain.key, l.args.ruleId!))) continue;
-      reacting.push({
-        key: k(chain.key, l.args.ruleId!),
-        chain: chain.key,
-        ruleId: l.args.ruleId!,
-        state: "reacting",
-        originTx: originHex(l.args.originTxHash!),
-        reactiveTx: l.transactionHash,
-      });
+  for (const it of newest) {
+    const chain = CHAIN_LIST.find((c) => c.key === it.chain)!;
+    const stored = storedExecution(it.chain, it.ruleId);
+    if (stored) Object.assign(it, { reactiveTx: stored.reactiveTx ?? undefined, callbackTx: stored.callbackTx ?? undefined, t0: stored.t0 });
+    const cached = enriched.get(it.key) ?? partial.get(it.key);
+    if (cached) for (const [k2, v] of Object.entries(cached)) if (v !== undefined) Object.assign(it, { [k2]: v });
+    if (!enriched.has(it.key) && !inFlight.has(it.key)) {
+      // Never awaited: on a network that blocks Lasna the lookups can take seconds, and the screen must not wait.
+      inFlight.add(it.key);
+      enrich(chain, it.ruleId, records.get(it.key)!)
+        .then((out) => partial.set(it.key, out))
+        .finally(() => inFlight.delete(it.key));
     }
-  } catch {
-    /* Lasna unreachable: executed rows still render */
   }
+
+  // In-flight rows (Lasna fired, callback not landed yet), refreshed in the background so a slow Lasna never
+  // holds up the screen.
+  if (!reactingInFlight) {
+    reactingInFlight = true;
+    loadReacting()
+      .then((r) => (reactingCache = r))
+      .catch(() => undefined)
+      .finally(() => (reactingInFlight = false));
+  }
+  const reacting = reactingCache.filter((r) => !finalStatus.has(r.key));
 
   const items = [...new Map([...reacting, ...newest].map((i) => [i.key, i])).values()];
   return { items, stats, last: newest[0] };
 }
 
+let reactingCache: FeedItem[] = [];
+let reactingInFlight = false;
+async function loadReacting(): Promise<FeedItem[]> {
+  const latest = await lasnaClient.getBlockNumber();
+  const trig = await lasnaClient.getContractEvents({
+    address: REACTIVE.address,
+    abi: parallaxReactiveAbi,
+    eventName: "RuleTriggered",
+    fromBlock: latest - LASNA_TAIL,
+    toBlock: latest,
+  });
+  const out: FeedItem[] = [];
+  for (const l of trig) {
+    const chain = CHAIN_LIST.find((c) => BigInt(c.chainId) === l.args.chainId);
+    if (!chain) continue;
+    out.push({
+      key: k(chain.key, l.args.ruleId!),
+      chain: chain.key,
+      ruleId: l.args.ruleId!,
+      state: "reacting",
+      originTx: originHex(l.args.originTxHash!),
+      reactiveTx: l.transactionHash,
+    });
+  }
+  return out;
+}
+
+/** Figures from the stored proofs, shown until the first live read lands (never a blank strip). */
+function storedStats(): Record<ChainKey, ChainStats> {
+  return Object.fromEntries(
+    CHAIN_LIST.map((c) => {
+      const b = [...PROOFS.executions, ...PROOFS.bench].filter((e) => e.chain === c.key).map((e) => e.latencyBlocks);
+      const s = b.map((x) => (x * c.blockMs) / 1000);
+      return [c.key, { n: b.length, p50Blocks: pct(b, 50), p50Seconds: pct(s, 50), minSeconds: s.length ? Math.min(...s) : undefined }];
+    }),
+  ) as Record<ChainKey, ChainStats>;
+}
+
 /** Polls every 2.5 s, about the time Parallax takes end to end, so rows animate through their states. */
 export function useActivity() {
-  return useQuery({ queryKey: ["activity", REACTIVE.address], queryFn: loadActivity, refetchInterval: 2_500 });
+  return useQuery({
+    queryKey: ["activity", REACTIVE.address],
+    queryFn: loadActivity,
+    refetchInterval: 2_500,
+    placeholderData: (prev) => prev ?? { items: [], stats: storedStats() },
+  });
 }

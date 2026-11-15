@@ -41,29 +41,29 @@ export function MyRules() {
   const active = rules?.filter((r) => r.status === 1).length ?? 0;
 
   return (
-    <Panel title="My rules" aside={rules?.length ? <span className="num text-xs text-faint">{active} active / {rules.length}</span> : null}>
+    <Panel title="My rules" aside={rules?.length ? <span className="num text-[12px] text-faint">{active} active of {rules.length}</span> : null}>
       {!address ? (
         <Empty>Connect a wallet to see your rules.</Empty>
       ) : isLoading ? (
         <Empty>Loading…</Empty>
       ) : !rules?.length ? (
-        <Empty>No rules yet. Arm one on the left.</Empty>
+        <Empty>No rules yet. Arm one in Create a rule.</Empty>
       ) : (
-        <ul className="-my-2 divide-y divide-line">
+        <ul className="-mx-6">
           {rules.map((r) => (
-            <li key={r.id.toString()} className="flex items-center gap-3 py-3">
-              <span className="num w-8 shrink-0 text-xs text-faint">#{r.id.toString()}</span>
+            <li key={r.id.toString()} className="flex min-h-[56px] items-center gap-3 border-t border-rule px-6 py-2.5 first:border-t-0">
+              <span className="num w-9 shrink-0 text-[12px] text-faint">#{r.id.toString()}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-medium">{TYPE_LABEL[r.ruleType]}</span>
                   <StatusChip r={r} />
                 </div>
-                <p className="num mt-0.5 truncate text-xs text-muted">{describe(r)}</p>
+                <p className="num mt-0.5 truncate text-[13px] text-muted">{describe(r)}</p>
               </div>
               {r.status === 1 && !r.triggered && (
                 <Button
                   variant="ghost"
-                  className="h-8 px-3 text-xs"
+                  className="h-8 px-3 text-[12px]"
                   disabled={flow.busy}
                   onClick={() =>
                     flow.run([
@@ -81,14 +81,14 @@ export function MyRules() {
           ))}
         </ul>
       )}
-      {flow.state.status === "error" && <p className="mt-3 text-xs text-danger">{flow.state.message}</p>}
-      <p className="mt-4 text-[11px] text-faint">
+      {flow.state.status === "error" && <p className="mt-3 text-[12px] text-danger">{flow.state.message}</p>}
+      <p className="mt-4 text-[12px] text-faint">
         Rules live in{" "}
-        <a className="underline decoration-line underline-offset-2 hover:text-muted" href={chain.explorerAddress(chain.executor)} target="_blank" rel="noreferrer">
+        <a className="underline decoration-control underline-offset-2 hover:text-muted" href={chain.explorerAddress(chain.executor)} target="_blank" rel="noreferrer">
           ParallaxExecutor
         </a>{" "}
         and are mirrored by{" "}
-        <a className="underline decoration-line underline-offset-2 hover:text-muted" href={LINKS.lasnaAddress(REACTIVE.address)} target="_blank" rel="noreferrer">
+        <a className="underline decoration-control underline-offset-2 hover:text-muted" href={LINKS.lasnaAddress(REACTIVE.address)} target="_blank" rel="noreferrer">
           ParallaxReactive
         </a>{" "}
         on Reactive Lasna.
@@ -98,5 +98,5 @@ export function MyRules() {
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-sm text-faint">{children}</p>;
+  return <p className="text-[13px] text-muted">{children}</p>;
 }
