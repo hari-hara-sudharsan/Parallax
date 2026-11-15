@@ -1,11 +1,24 @@
 # Full-loop proofs: origin event → reactive tx → callback tx
 
 Each row is one complete, unattended Tripwire execution on testnet. No keeper and no script triggered the callback:
-Reactive Network saw the origin event and did the rest.
+Reactive Network saw the origin event and did the rest. Reproduce any row with `./tw.sh proof <originTx>`.
 
-## Run 1: STOP_LOSS, 2026-11-15 ✅
+## Summary (for the README / submission)
 
-Rule 1: *sell 1 mWETH if the WETH price drops ~3%* (trigger tick 196556, pool starts at tick 196256 ≈ 3000 USDC/WETH).
+| # | Rule | Deployment | Origin tx (Unichain) | Reactive tx (Lasna) | Callback tx (Unichain) | Result | Latency |
+|---|---|---|---|---|---|---|---|
+| 1 | STOP_LOSS | v1 | [0xec2c…a05e](https://sepolia.uniscan.xyz/tx/0xec2c37a57b49fb2e17210c391cb9b59e42853a38de8e5b90cd4fef7e7e0ba05e) | [0xb15d…f3a9](https://lasna.reactscan.net/tx/0xb15dead18f90deb0204e3a13cf67127acc9df34fa530e4fb3bdf7683bb3df3a9) | [0xabeb…2bc0](https://sepolia.uniscan.xyz/tx/0xabeb52f84745ad9c8af2ac13372b3216ab978346e03bef227c8ae6d5bb2e2bc0) | sold 1 mWETH → 2,661.78 mUSDC | **2 s** |
+| 2 | TAKE_PROFIT | v2 | [0x01a8…2150](https://sepolia.uniscan.xyz/tx/0x01a88f113769dd5fdd8f842ebad7660408a39a1a4a21c224dd884b0cfe502150) | [0x6f2b…69ba](https://lasna.reactscan.net/tx/0x6f2bc9d0cc6696ee7a56f1b682461d6086ad7b657040ed8d4d873e0ccfcb69ba) | [0x2f14…8d10](https://sepolia.uniscan.xyz/tx/0x2f14b1d7d1d4a887cd087cad96745745cd59550a8e56b3973e2a15bd98fd8d10) | sold 1 mWETH → 2,986.05 mUSDC | **2 s** |
+| 3 | RANGE_GUARD | v2 | [0x4e1f…ab26](https://sepolia.uniscan.xyz/tx/0x4e1f392150e5f4c663e33950887f019fdc74a265ed0be2eb65629d80169bab26) | [0x9ab9…bd0e](https://lasna.reactscan.net/tx/0x9ab9f6b4d537941e27664c1e98194fbc4a485c079ec6217348f064912f92bd0e) | [0xde4c…40d8](https://sepolia.uniscan.xyz/tx/0xde4c9f30469084c616beb438ff2672f33a7e1654a56cb1a60bf7050a198340d8) | LP #8025 withdrawn → 0.1097 mWETH, NFT returned | **3 s** |
+
+Latency = `executedAt` (T1, emitted in `RuleExecuted`) − origin block timestamp (T0), both on Unichain's clock.
+Lasna and Unichain clocks differ by about 1 s, so cross-chain timestamps aren't compared directly.
+
+---
+
+## Run 1: STOP_LOSS (deployment v1), 2026-11-15
+
+Rule 1: *sell 1 mWETH if the WETH price drops ~3%* (trigger tick 196556, pool at tick 196256 ≈ 3000 USDC/WETH).
 In this pool mUSDC sorts as currency0, so a falling WETH price means a **rising** tick.
 
 | Step | Chain | Tx | Block · timestamp | What happened |
@@ -13,26 +26,42 @@ In this pool mUSDC sorts as currency0, so a falling WETH price means a **rising*
 | Rule created | Unichain Sepolia | [`0x2d862bf9…6030316`](https://sepolia.uniscan.xyz/tx/0x2d862bf97ecab6a2baed74e009245309b19dc62ee01581f169c8d96e26030316) | | `RuleCreated(1, …)`, 1 mWETH deposited |
 | Reactive: mirror | Lasna | [`0xb6844050…173c5fd1`](https://lasna.reactscan.net/tx/0xb68440509ab527f225b03f0c8899148842c84e79492248467ea25cc0173c5fd1) | 8382901 | `RuleMirrored` + subscribed to the pool's `Swap` events (from inside `react()`) |
 | **① Origin swap** | Unichain Sepolia | [`0xec2c37a5…7e0ba05e`](https://sepolia.uniscan.xyz/tx/0xec2c37a57b49fb2e17210c391cb9b59e42853a38de8e5b90cd4fef7e7e0ba05e) | 67866435 · **T0 = 1794718863** | 20 mWETH sold, tick 196256 → 197394 (crosses 196556) |
-| **② Reactive tx** | Lasna | [`0xb15dead1…bb3df3a9`](https://lasna.reactscan.net/tx/0xb15dead18f90deb0204e3a13cf67127acc9df34fa530e4fb3bdf7683bb3df3a9) | 8382948 · 1794718862¹ | `RuleTriggered(1, …)` + `requestCallbackV_1_0`, gas used 100,727 |
-| **③ Callback tx** | Unichain Sepolia | [`0xabeb52f8…bb2e2bc0`](https://sepolia.uniscan.xyz/tx/0xabeb52f84745ad9c8af2ac13372b3216ab978346e03bef227c8ae6d5bb2e2bc0) | 67866437 · **T1 = 1794718865** | `RuleExecuted(1, tick 197450, in 1 mWETH, out 2,661.78 mUSDC, origin 0xec2c…, executedAt T1)` |
+| **② Reactive tx** | Lasna | [`0xb15dead1…bb3df3a9`](https://lasna.reactscan.net/tx/0xb15dead18f90deb0204e3a13cf67127acc9df34fa530e4fb3bdf7683bb3df3a9) | 8382948 | `RuleTriggered(1, …)` + `requestCallbackV_1_0`, gas used 100,727 |
+| **③ Callback tx** | Unichain Sepolia | [`0xabeb52f8…bb2e2bc0`](https://sepolia.uniscan.xyz/tx/0xabeb52f84745ad9c8af2ac13372b3216ab978346e03bef227c8ae6d5bb2e2bc0) | 67866437 · **T1 = 1794718865** | `RuleExecuted`: 1 mWETH → 2,661.78 mUSDC |
 | Reactive: cleanup | Lasna | [`0xc1daaaa5…3aaa24899`](https://lasna.reactscan.net/tx/0xc1daaaa508cc7dd4b93a21a2f903504a06c942bb8dda6ae3ccb21543aaa24899) | 8382950 | `RuleRemoved` + unsubscribed from the now-empty pool |
 
-**Latency T1 − T0 = 2 seconds** (2 Unichain blocks after the origin swap), measured on Unichain's own clock.
+## Run 2: TAKE_PROFIT (deployment v2), 2026-11-15
 
-¹ Lasna and Unichain block clocks differ by about 1 s, so cross-chain timestamps aren't compared directly.
+Rule 1 (v2): *sell 1 mWETH if the WETH price rises ~3%* → fires when tick ≤ 197150 (pool at tick 197450).
 
-Costs: the reactive tx cost ≈ 0.02 lREACT. The callback cost the executor ≈ 0.00000032 ETH.
+| Step | Chain | Tx | Block · timestamp | What happened |
+|---|---|---|---|---|
+| Rule created | Unichain Sepolia | [`0x21a56986…c5f37d23`](https://sepolia.uniscan.xyz/tx/0x21a569868054c772772407b24202ab6fe7ee9f64104909d6c5418d40c5f37d23) | | `RuleCreated(1, TAKE_PROFIT, lower 197150)`; mirrored on Lasna within 3 s |
+| **① Origin swap** | Unichain Sepolia | [`0x01a88f11…cfe502150`](https://sepolia.uniscan.xyz/tx/0x01a88f113769dd5fdd8f842ebad7660408a39a1a4a21c224dd884b0cfe502150) | 67867734 · **T0 = 1794720162** | 60,000 mUSDC sold, tick 197450 → 196243 (crosses 197150) |
+| **② Reactive tx** | Lasna | [`0x6f2bc9d0…cfcb69ba`](https://lasna.reactscan.net/tx/0x6f2bc9d0cc6696ee7a56f1b682461d6086ad7b657040ed8d4d873e0ccfcb69ba) | | `RuleTriggered(1, …)` + `requestCallbackV_1_0` |
+| **③ Callback tx** | Unichain Sepolia | [`0x2f14b1d7…98fd8d10`](https://sepolia.uniscan.xyz/tx/0x2f14b1d7d1d4a887cd087cad96745745cd59550a8e56b3973e2a15bd98fd8d10) | **T1 = 1794720164** | `RuleExecuted`: 1 mWETH → 2,986.05 mUSDC |
 
-## Summary table (for the README / submission)
+## Run 3: RANGE_GUARD (deployment v2), 2026-11-15
 
-| # | Rule | Origin tx | Reactive tx | Callback tx | Latency |
-|---|---|---|---|---|---|
-| 1 | STOP_LOSS | [0xec2c…a05e](https://sepolia.uniscan.xyz/tx/0xec2c37a57b49fb2e17210c391cb9b59e42853a38de8e5b90cd4fef7e7e0ba05e) | [0xb15d…f3a9](https://lasna.reactscan.net/tx/0xb15dead18f90deb0204e3a13cf67127acc9df34fa530e4fb3bdf7683bb3df3a9) | [0xabeb…2bc0](https://sepolia.uniscan.xyz/tx/0xabeb52f84745ad9c8af2ac13372b3216ab978346e03bef227c8ae6d5bb2e2bc0) | **2 s** |
+Rule 2 (v2): guard LP position **#8025** on [195660, 196860) (≈ ±6% around tick 196302).
+Mirrored on Lasna as bounds [195659, 196860], i.e. fire when `tick < tickLower` or `tick ≥ tickUpper`.
+
+| Step | Chain | Tx | Block · timestamp | What happened |
+|---|---|---|---|---|
+| Position minted + guarded | Unichain Sepolia | [`0x85110bf8…c3396a57d`](https://sepolia.uniscan.xyz/tx/0x85110bf8eaae3fb2ed85913a699cdf817aeece022df865a0a6095c6c3396a57d) | | `createRangeGuard(8025)`: NFT moved into the executor, `RuleCreated(2, RANGE_GUARD, …)` |
+| **① Origin swap** | Unichain Sepolia | [`0x4e1f3921…169bab26`](https://sepolia.uniscan.xyz/tx/0x4e1f392150e5f4c663e33950887f019fdc74a265ed0be2eb65629d80169bab26) | 67867887 · **T0 = 1794720315** | 20 mWETH sold, tick 196302 → 197435 (leaves the range above 196860) |
+| **② Reactive tx** | Lasna | [`0x9ab9f6b4…2f92bd0e`](https://lasna.reactscan.net/tx/0x9ab9f6b4d537941e27664c1e98194fbc4a485c079ec6217348f064912f92bd0e) | | `RuleTriggered(2, …)` + `requestCallbackV_1_0` |
+| **③ Callback tx** | Unichain Sepolia | [`0xde4c9f30…a198340d8`](https://sepolia.uniscan.xyz/tx/0xde4c9f30469084c616beb438ff2672f33a7e1654a56cb1a60bf7050a198340d8) | **T1 = 1794720318** | `RuleExecuted`: all liquidity + fees withdrawn (0.1097 mWETH; out of range above ⇒ 100% currency1), empty NFT returned (owner = user, liquidity 0) |
+
+---
 
 ## How to add a row
 
-1. `./tw.sh create-stop-loss`, then `./tw.sh push-down`. The swap tx is the **origin** (T0 = its block timestamp).
-2. On Lasna, find the `RuleTriggered` log from `TripwireReactive`:
-   `cast logs --address <reactive> $(cast keccak "RuleTriggered(uint256,bytes32,int24,uint256)") --from-block <recent> --rpc-url $LASNA_RPC`
-3. On Unichain, find `RuleExecuted` from `TripwireExecutor`. Its data carries the origin tx hash and `executedAt` (T1).
-4. Note: `SYSTEM.getCallbacks(reactiveTx)` returned an empty list on Lasna for this run, so we link via the origin hash in `RuleExecuted` instead.
+```bash
+./tw.sh create-stop-loss      # or create-take-profit / create-range-guard
+./tw.sh push-down             # or push-up. Copy the swap tx hash from contracts/broadcast/04_PushPrice.s.sol/1301/run-latest.json
+./tw.sh proof <originTx>      # prints origin / reactive / callback tx + latency
+```
+
+Note: `SYSTEM.getCallbacks(reactiveTx)` returned an empty list on Lasna, so the proof links via the origin tx hash that
+`RuleExecuted` carries.
