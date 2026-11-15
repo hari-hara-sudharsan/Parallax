@@ -6,6 +6,6 @@
   "poolId": "0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c",
   "rangeGuardPositionId": 8025,
   "startPrice": 3000,
-  "tripwireExecutor": "0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af",
-  "tripwireExecutorV1": "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9"
+  "parallaxExecutor": "0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af",
+  "parallaxExecutorV1": "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9"
 }

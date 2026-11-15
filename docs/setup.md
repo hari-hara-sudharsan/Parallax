@@ -16,7 +16,7 @@ node --version
 ## 2. Get the code + dependencies
 
 ```bash
-git clone <repo-url> tripwire && cd tripwire
+git clone <repo-url> parallax && cd parallax
 ./tw.sh install          # git submodules: forge-std, reactive-lib-omni, v4-periphery
 ./tw.sh build
 ./tw.sh test

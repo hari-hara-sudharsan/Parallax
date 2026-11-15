@@ -132,7 +132,7 @@ export function DemoPanel() {
 
       <p className="mt-4 text-[11px] leading-relaxed text-faint">
         Crash sells 20 mWETH (about −12%); pump sells 60,000 mUSDC (about +12%). Both are ordinary Uniswap v4 swaps that anyone
-        could make, and Tripwire reacts to them exactly like it would to a real market move.
+        could make, and Parallax reacts to them exactly like it would to a real market move.
       </p>
     </Panel>
   );

@@ -22,7 +22,7 @@ pragma solidity ^0.8.29;
 import { ISystemContract } from "reactive-lib-omni/src/interfaces/ISystemContract.sol";
 import { AbstractReactive } from "reactive-lib-omni/src/base/AbstractReactive.sol";
 
-contract TripwireReactive is AbstractReactive {
+contract ParallaxReactive is AbstractReactive {
     constructor(...) payable { SYSTEM.subscribe(...); }
     function react(LogRecord memory log_) external onlySystem { ... }
 }
@@ -57,9 +57,9 @@ struct LogRecord {
 | # | chainId | contract | topic0 | topic1 | Purpose |
 |---|---|---|---|---|---|
 | 1 | 1301 | PoolManager `0x00b0…62ac` | Swap `0x40e9…112f` | our `poolId` | price feed for the demo pool only |
-| 2 | 1301 | TripwireExecutor | `RuleCreated` | IGNORE | mirror rules |
-| 3 | 1301 | TripwireExecutor | `RuleCancelled` | IGNORE | mirror rules |
-| 4 | 1301 | TripwireExecutor | `RuleExecuted` / `RuleSkipped` | IGNORE | clear or re-arm the pending state |
+| 2 | 1301 | ParallaxExecutor | `RuleCreated` | IGNORE | mirror rules |
+| 3 | 1301 | ParallaxExecutor | `RuleCancelled` | IGNORE | mirror rules |
+| 4 | 1301 | ParallaxExecutor | `RuleExecuted` / `RuleSkipped` | IGNORE | clear or re-arm the pending state |
 
 ## 3. Callback emission format (⚠️ changed from the brief)
 
@@ -68,7 +68,7 @@ The `Callback` event is **deprecated**. Use:
 ```solidity
 SYSTEM.requestCallbackV_1_0(ISystemContract.CallbackConfiguration_V_1_0({
     chainId:   1301,               // destination
-    recipient: executor,           // TripwireExecutor
+    recipient: executor,           // ParallaxExecutor
     gasLimit:  1_000_000,          // ≥ 100,000 minimum; proxy withholds _extraGas + _maxChargeGas
     payload:   abi.encodeWithSignature("execute(address,uint256,...)", address(0), ruleId, ...)
 }));
@@ -81,7 +81,7 @@ SYSTEM.requestCallbackV_1_0(ISystemContract.CallbackConfiguration_V_1_0({
 ## 4. Callback authorization pattern
 
 ```solidity
-contract TripwireExecutor is AbstractCallback {
+contract ParallaxExecutor is AbstractCallback {
     constructor(IPayable callbackProxy_, address reactive_) payable AbstractCallback(callbackProxy_, reactive_) {}
 
     function execute(address reactive_, uint256 ruleId_ /*...*/)
@@ -97,8 +97,8 @@ A contract cannot be both reactive and callback. They are two separate contracts
 
 | Side | Who pays | Currency | How to fund |
 |---|---|---|---|
-| Reactive (Lasna) | TripwireReactive, per `react()` | **lREACT** | `SYSTEM.depositTo(reactive)` with value (preferred), or a payable constructor / plain transfer + `coverDebt()` |
-| Destination (Unichain) | **TripwireExecutor**, per callback | **Unichain Sepolia ETH** (not REACT) | `CallbackProxy.depositTo(executor)` with value, or a transfer + `coverDebt()` |
+| Reactive (Lasna) | ParallaxReactive, per `react()` | **lREACT** | `SYSTEM.depositTo(reactive)` with value (preferred), or a payable constructor / plain transfer + `coverDebt()` |
+| Destination (Unichain) | **ParallaxExecutor**, per callback | **Unichain Sepolia ETH** (not REACT) | `CallbackProxy.depositTo(executor)` with value, or a transfer + `coverDebt()` |
 
 - Fee = `max(gasprice, basefee) × coeff/1000 × (gasUsed + extraGas)`. On Lasna the defaults are coeff 1000 and extraGas 100k, but proxy values are per chain, so read them with `cast call <proxy> "_extraGas()"`.
 - **Any debt > 0 stops service** (no `react()` calls, no callback delivery). `AbstractPayer.pay()` settles automatically from the contract's own balance when reserves run out, so we keep a balance in both contracts.

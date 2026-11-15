@@ -12,8 +12,8 @@ contract DeployTokens is DemoBase {
         (uint256 pk, address me) = _deployer();
 
         vm.startBroadcast(pk);
-        MockERC20 weth = new MockERC20("Tripwire Mock WETH", "mWETH", WETH_DECIMALS);
-        MockERC20 usdc = new MockERC20("Tripwire Mock USDC", "mUSDC", USDC_DECIMALS);
+        MockERC20 weth = new MockERC20("Parallax Mock WETH", "mWETH", WETH_DECIMALS);
+        MockERC20 usdc = new MockERC20("Parallax Mock USDC", "mUSDC", USDC_DECIMALS);
         weth.mint(me, 1_000 * 10 ** WETH_DECIMALS);
         usdc.mint(me, 5_000_000 * 10 ** USDC_DECIMALS);
         vm.stopBroadcast();

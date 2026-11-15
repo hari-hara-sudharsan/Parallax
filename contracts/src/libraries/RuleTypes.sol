@@ -2,7 +2,7 @@
 pragma solidity ^0.8.29;
 
 /// @title RuleTypes
-/// @notice Shared types for Tripwire rules (used by the executor, the reactive contract, and tests).
+/// @notice Shared types for Parallax rules (used by the executor, the reactive contract, and tests).
 
 /// @notice What the rule protects. The type is a label for the UI and decides the ACTION:
 ///         STOP_LOSS / TAKE_PROFIT swap the deposited tokens; RANGE_GUARD withdraws an LP position.

@@ -5,11 +5,11 @@ import {AbstractReactive} from "reactive-lib-omni/base/AbstractReactive.sol";
 import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {ISystemContract} from "reactive-lib-omni/interfaces/ISystemContract.sol";
 
-import {ITripwireExecutor} from "./interfaces/ITripwireExecutor.sol";
+import {IParallaxExecutor} from "./interfaces/IParallaxExecutor.sol";
 import {RuleType} from "./libraries/RuleTypes.sol";
 
-/// @title TripwireReactive
-/// @notice Reactive-Network half of Tripwire (deployed on Lasna). It keeps a live mirror of every active
+/// @title ParallaxReactive
+/// @notice Reactive-Network half of Parallax (deployed on Lasna). It keeps a live mirror of every active
 ///         rule by listening to the executor's events, watches each rule's Uniswap v4 pool for `Swap`
 ///         events, and the moment a swap moves the tick across a rule it requests a callback to the
 ///         executor. Pools are subscribed to on demand (from inside `react()`) when their first rule
@@ -17,7 +17,7 @@ import {RuleType} from "./libraries/RuleTypes.sol";
 /// @dev Omni model: no RVM, no `vm` flag. `react()` is a normal tx called by the system contract
 ///      (`onlySystem`), and callbacks are requested via `SYSTEM.requestCallbackV_1_0`.
 ///      Never revert in `react()` to filter: reverts are still billed. Unknown logs fall through.
-contract TripwireReactive is AbstractReactive {
+contract ParallaxReactive is AbstractReactive {
     // ── Errors ──────────────────────────────────────────────────────────────
     error NotOwner();
     error ExecutorAlreadySet();
@@ -41,7 +41,7 @@ contract TripwireReactive is AbstractReactive {
     uint256 public constant SWAP_TOPIC0 =
         uint256(keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)"));
     /// @dev Executor events (enums encode as uint8). A unit test asserts these equal the
-    ///      `ITripwireExecutor.<Event>.selector` values so the two contracts can never drift apart.
+    ///      `IParallaxExecutor.<Event>.selector` values so the two contracts can never drift apart.
     uint256 public constant RULE_CREATED_TOPIC0 =
         uint256(keccak256("RuleCreated(uint256,address,bytes32,uint8,int24,int24,bool,uint128,uint256)"));
     uint256 public constant RULE_CANCELLED_TOPIC0 = uint256(keccak256("RuleCancelled(uint256,address)"));
@@ -51,7 +51,7 @@ contract TripwireReactive is AbstractReactive {
 
     /// @notice Gas forwarded to `execute` on the destination (≥ 100k network minimum; swap ≈ 200–300k).
     uint64 public constant CALLBACK_GAS_LIMIT = 1_000_000;
-    /// @notice Must match TripwireExecutor.MAX_ACTIVE_RULES_PER_POOL so the mirror never overflows.
+    /// @notice Must match ParallaxExecutor.MAX_ACTIVE_RULES_PER_POOL so the mirror never overflows.
     uint256 public constant MAX_RULES_PER_POOL = 25;
     /// @notice Bound on callbacks requested per Swap. Extra triggered rules fire on the next swap.
     /// @dev Sized against the 900k reactive-tx gas cap: scanning 25 rules ≈ 160k, and each request is
@@ -238,7 +238,7 @@ contract TripwireReactive is AbstractReactive {
     ///      contract's address so the executor can authenticate the callback.
     function _requestExecute(uint256 ruleId, int24 tick, uint256 originTxHash) internal {
         bytes memory payload =
-            abi.encodeCall(ITripwireExecutor.execute, (address(0), ruleId, tick, originTxHash));
+            abi.encodeCall(IParallaxExecutor.execute, (address(0), ruleId, tick, originTxHash));
         SYSTEM.requestCallbackV_1_0(
             ISystemContract.CallbackConfiguration_V_1_0({
                 chainId: DESTINATION_CHAIN_ID,

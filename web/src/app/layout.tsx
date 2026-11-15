@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Tripwire",
+  title: "Parallax · keeperless protection for Uniswap v4",
   description: "Keeperless, ~1-second stop-loss and LP range protection for Uniswap v4, powered by Reactive Omni.",
 };
 

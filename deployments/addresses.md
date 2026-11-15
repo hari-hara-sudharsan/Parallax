@@ -59,6 +59,8 @@ Source: [Uniswap docs `content/protocols/v4/deployments.mdx`](https://github.com
 
 Phase 1 TODO: re-confirm the Swap topic with `cast sig-event` and against a real PoolManager log once Foundry is installed.
 
+> **Naming note:** the project was renamed from its working name *Tripwire* to **Parallax** on 2026-11-15 (another buildathon entry uses that name). Deployments v1/v2 and Runs 1–3 below were made before the rename: same code, same events; only identifiers changed.
+
 ## Our deployments
 
 Scripts write these automatically to `contracts/deployments/<chainId>.json`; copy them here for the submission.
@@ -68,11 +70,11 @@ Scripts write these automatically to `contracts/deployments/<chainId>.json`; cop
 | MockWETH (mWETH) | Unichain Sepolia | [`0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5`](https://sepolia.uniscan.xyz/address/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) | |
 | MockUSDC (mUSDC) | Unichain Sepolia | [`0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c`](https://sepolia.uniscan.xyz/address/0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c) | |
 | Demo pool mUSDC/mWETH 0.3% (poolId) | Unichain Sepolia | `0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c` | |
-| **TripwireReactive v2** (current) | Lasna | [`0xC3C04592057E816EB706eF0E9A9438267537B2A2`](https://lasna.reactscan.net/address/0xC3C04592057E816EB706eF0E9A9438267537B2A2) | [`0x6fa7530f…6196f459`](https://lasna.reactscan.net/tx/0x6fa7530f219136a3f9cbfa5d2d22f113b7f0b32473f96863558b6e658196f459) |
-| **TripwireExecutor v2** (current) | Unichain Sepolia | [`0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af`](https://sepolia.uniscan.xyz/address/0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af) | [`0xc1fa91d5…3df87d9b1`](https://sepolia.uniscan.xyz/tx/0xc1fa91d53d01974f63e487a5c9ab136ab1be53333b55900e11db66f3df87d9b1) |
-| TripwireReactive v1 (Phase 2, stop-loss only) | Lasna | [`0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5`](https://lasna.reactscan.net/address/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) | |
-| TripwireExecutor v1 (Phase 2, stop-loss only) | Unichain Sepolia | [`0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9`](https://sepolia.uniscan.xyz/address/0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9) | |
+| **ParallaxReactive v2** (current) | Lasna | [`0xC3C04592057E816EB706eF0E9A9438267537B2A2`](https://lasna.reactscan.net/address/0xC3C04592057E816EB706eF0E9A9438267537B2A2) | [`0x6fa7530f…6196f459`](https://lasna.reactscan.net/tx/0x6fa7530f219136a3f9cbfa5d2d22f113b7f0b32473f96863558b6e658196f459) |
+| **ParallaxExecutor v2** (current) | Unichain Sepolia | [`0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af`](https://sepolia.uniscan.xyz/address/0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af) | [`0xc1fa91d5…3df87d9b1`](https://sepolia.uniscan.xyz/tx/0xc1fa91d53d01974f63e487a5c9ab136ab1be53333b55900e11db66f3df87d9b1) |
+| ParallaxReactive v1 (Phase 2, stop-loss only) | Lasna | [`0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5`](https://lasna.reactscan.net/address/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) | |
+| ParallaxExecutor v1 (Phase 2, stop-loss only) | Unichain Sepolia | [`0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9`](https://sepolia.uniscan.xyz/address/0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9) | |
 
 Deployer: `0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3`. v2 (Phase 3) adds two-sided bounds + RANGE_GUARD; the event
-layout changed, so both contracts were redeployed and linked with `setExecutor` ([`0x011d29eb…a191821a`](https://lasna.reactscan.net/tx/0x011d29eb8f7a17bc17fc74065d1196d7cd43f9c4aa75d5e882bb8620a191821a)). (TripwireReactive and MockWETH share an address because each was the
+layout changed, so both contracts were redeployed and linked with `setExecutor` ([`0x011d29eb…a191821a`](https://lasna.reactscan.net/tx/0x011d29eb8f7a17bc17fc74065d1196d7cd43f9c4aa75d5e882bb8620a191821a)). (ParallaxReactive and MockWETH share an address because each was the
 deployer's first contract (nonce 0) on its own chain.)

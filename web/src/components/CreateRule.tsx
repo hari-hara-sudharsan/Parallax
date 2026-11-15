@@ -7,7 +7,7 @@ import { useAccount, useReadContract } from "wagmi";
 import { usePool } from "@/hooks/usePool";
 import { useTxFlow, type Step } from "@/hooks/useTxFlow";
 import { useBalances } from "@/hooks/useBalances";
-import { mockErc20Abi, positionManagerAbi, tripwireExecutorAbi } from "@/lib/abis";
+import { mockErc20Abi, positionManagerAbi, parallaxExecutorAbi } from "@/lib/abis";
 import { unichainClient } from "@/lib/clients";
 import { DEPLOYMENT, LINKS, POOL_KEY, UNICHAIN, WETH_DECIMALS, WETH_IS_CURRENCY0 } from "@/lib/deployment";
 import { boundsForPrice, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
@@ -100,7 +100,7 @@ function PriceRuleForm({ kind }: { kind: "stop" | "take" }) {
       label: isStop ? "Arm stop-loss" : "Arm take-profit",
       request: {
         address: DEPLOYMENT.executor,
-        abi: tripwireExecutorAbi,
+        abi: parallaxExecutorAbi,
         functionName: "createRule",
         args: [POOL_KEY, isStop ? 0 : 1, WETH_IS_CURRENCY0, bounds.lower, bounds.upper, amountIn, slippage],
         chainId: unichainSepolia.id,
@@ -278,7 +278,7 @@ function RangeGuardForm() {
     }
     steps.push({
       label: "Arm range guard",
-      request: { address: DEPLOYMENT.executor, abi: tripwireExecutorAbi, functionName: "createRangeGuard", args: [positionId, slippage], chainId: unichainSepolia.id },
+      request: { address: DEPLOYMENT.executor, abi: parallaxExecutorAbi, functionName: "createRangeGuard", args: [positionId, slippage], chainId: unichainSepolia.id },
     });
     await flow.run(steps);
   }

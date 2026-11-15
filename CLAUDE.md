@@ -1,4 +1,6 @@
-# Project brief for Claude Code — "Tripwire" (Reactive Omni Buildathon, Track 1)
+# Project brief for Claude Code — "Parallax" (Reactive Omni Buildathon, Track 1)
+
+> Renamed from the working name "Tripwire" on 2026-11-15: a competing entry in the same track uses that name.
 
 > ## ⚠️ Phase 0 corrections (verified 2026-11-14, these override the brief below)
 > Full details and sources: `docs/research.md`. Addresses: `deployments/addresses.md`.
@@ -62,9 +64,9 @@ Omni context: reactive contracts watch events on other chains and act automatica
 
 ---
 
-## 2. What we're building: Tripwire
+## 2. What we're building: Parallax
 
-**One line:** keeperless, ~1-second protection for Uniswap v4 traders and LPs. The user sets rules once, and Reactive executes them the moment the price crosses, with no bot or server.
+**One line (tagline: "a guard that watches your position from a parallel chain"):** keeperless, ~1-second protection for Uniswap v4 traders and LPs. The user sets rules once, and Reactive executes them the moment the price crosses, with no bot or server.
 
 ### The real problems it solves (for README and pitch)
 1. **DEXs have no native stop-loss.** AMMs have no order book, so stop-loss and take-profit depend on third-party keeper bots.
@@ -89,10 +91,10 @@ Why Omni matters: all four are races against time. With ~7s blocks plus reorg ri
 ```
  ORIGIN (Unichain Sepolia)            REACTIVE (Lasna testnet)              DESTINATION (Unichain Sepolia)
  ┌────────────────────────┐           ┌───────────────────────────┐         ┌───────────────────────────────┐
- │ Uniswap v4 PoolManager │──Swap────▶│ TripwireReactive.sol      │         │ TripwireExecutor.sol          │
+ │ Uniswap v4 PoolManager │──Swap────▶│ ParallaxReactive.sol      │         │ ParallaxExecutor.sol          │
  │  (our demo pool)       │  event    │  - subscribes to Swap     │──Callb.─▶│  - verifies callback sender  │
  │                        │           │    (filtered by poolId)   │         │  - re-checks price on-chain   │
- │ TripwireExecutor       │──Rule─────▶│  - subscribes to Rule*   │         │  - executes swap / LP change  │
+ │ ParallaxExecutor       │──Rule─────▶│  - subscribes to Rule*   │         │  - executes swap / LP change  │
  │  emits RuleCreated /   │  events   │    events (mirrors rules) │         │  - marks rule executed        │
  │  RuleCancelled         │           │  - on Swap: check rules   │         │  - emits RuleExecuted(ts)     │
  └────────────────────────┘           │    → request callback     │         └───────────────────────────────┘
@@ -102,7 +104,7 @@ Why Omni matters: all four are races against time. With ~7s blocks plus reorg ri
 ```
 
 ### Contracts
-1. **`TripwireExecutor.sol`** (destination, Unichain Sepolia; extends `AbstractCallback` from reactive-lib-omni)
+1. **`ParallaxExecutor.sol`** (destination, Unichain Sepolia; extends `AbstractCallback` from reactive-lib-omni)
    - `createRule(...)`: the user deposits or approves tokens, or hands over an LP position, and the contract stores the rule and emits `RuleCreated(ruleId, owner, poolId, ruleType, triggerTick, params)`.
    - `cancelRule(ruleId)`: refund, emit `RuleCancelled`.
    - `execute(address reactiveSender, uint256 ruleId, ...)`: the **callback entrypoint**. It must:
@@ -113,10 +115,10 @@ Why Omni matters: all four are races against time. With ~7s blocks plus reorg ri
      - perform the action (swap via v4, or modify liquidity via PositionManager)
      - emit `RuleExecuted(ruleId, executedAt = block.timestamp, priceTick, amountOut)`
    - Funding: the callback contract pays callback gas in Unichain Sepolia ETH via the Callback Proxy (`depositTo` or `receive` + `coverDebt`). Add a helper script.
-2. **`TripwireReactive.sol`** (Reactive Lasna testnet; `AbstractReactive`, **no `vm` modifier, no RVM**)
+2. **`ParallaxReactive.sol`** (Reactive Lasna testnet; `AbstractReactive`, **no `vm` modifier, no RVM**)
    - In the constructor or an owner-only init function, subscribe to:
      - PoolManager `Swap` events on Unichain Sepolia, filtered by our `poolId` topic (topic1)
-     - TripwireExecutor `RuleCreated` / `RuleCancelled` / `RuleExecuted`, to keep a local mirror of active rules
+     - ParallaxExecutor `RuleCreated` / `RuleCancelled` / `RuleExecuted`, to keep a local mirror of active rules
    - `react(...)`: decode the log. For rule events, update the mirror. For `Swap`, read the new tick/sqrtPrice and check active rules for that pool. For each triggered rule, **request the callback via `SYSTEM.requestCallbackV_1_0`** to the executor, then mark it "pending" locally to avoid duplicate callbacks.
    - Keep the loop bounded (cap the active rules checked per event, e.g. 20) to keep gas predictable. Store rules sorted or bucketed by trigger tick if easy; a simple array is fine for the MVP.
    - Fund it with testnet lREACT per the docs.
@@ -150,13 +152,13 @@ Read events with viem `watchContractEvent` or polling. No backend unless truly n
 ## 5. Repo structure
 
 ```
-tripwire/
+parallax/
 ├── CLAUDE.md                  # this brief
 ├── README.md                  # judge-facing docs (see section 7)
 ├── contracts/                 # Foundry project
 │   ├── src/
-│   │   ├── TripwireExecutor.sol
-│   │   ├── TripwireReactive.sol
+│   │   ├── ParallaxExecutor.sol
+│   │   ├── ParallaxReactive.sol
 │   │   ├── libraries/RuleTypes.sol
 │   │   └── mocks/MockERC20.sol
 │   ├── script/                # Deploy*.s.sol, CreatePool, AddLiquidity, PushPrice, FundCallback

@@ -9,13 +9,14 @@ import { Button, cx } from "./ui";
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      {/* A taut wire with a trigger point: the product in one glyph. */}
+      {/* Parallax: one point seen from two vantage points (the pool's chain and Reactive's). */}
       <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
         <rect x="0.5" y="0.5" width="25" height="25" rx="7" className="fill-raised stroke-line" />
-        <path d="M5 15.5h6l2-5 2 5h6" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="stroke-triggered" />
-        <circle cx="13" cy="10.5" r="1.6" className="fill-ink" />
+        <path d="M7.5 19 13 7" fill="none" strokeWidth="2" strokeLinecap="round" className="stroke-faint" />
+        <path d="M13 19 18.5 7" fill="none" strokeWidth="2" strokeLinecap="round" className="stroke-triggered" />
+        <circle cx="15.75" cy="13" r="1.7" className="fill-ink" />
       </svg>
-      <span className="text-[15px] font-semibold tracking-tight">Tripwire</span>
+      <span className="text-[15px] font-semibold tracking-tight">Parallax</span>
       <span className="hidden rounded-md border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-faint sm:inline">
         testnet
       </span>

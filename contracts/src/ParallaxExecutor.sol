@@ -25,20 +25,20 @@ import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
-import {ITripwireExecutor} from "./interfaces/ITripwireExecutor.sol";
+import {IParallaxExecutor} from "./interfaces/IParallaxExecutor.sol";
 import {Rule, RuleType, RuleStatus, SkipReason, NO_LOWER, NO_UPPER} from "./libraries/RuleTypes.sol";
 
-/// @title TripwireExecutor
-/// @notice Destination-chain half of Tripwire. Users register protection rules here:
+/// @title ParallaxExecutor
+/// @notice Destination-chain half of Parallax. Users register protection rules here:
 ///         • STOP_LOSS / TAKE_PROFIT: deposit tokens; when the price crosses, they are swapped.
 ///         • RANGE_GUARD: hand over a Uniswap v4 LP position; when the price leaves its range (the position
 ///           stops earning fees), the liquidity + fees are withdrawn back to the owner.
-///         TripwireReactive (on Reactive Network) watches the pool and, the moment a swap crosses a rule,
+///         ParallaxReactive (on Reactive Network) watches the pool and, the moment a swap crosses a rule,
 ///         requests a callback; the Reactive Callback Proxy then calls `execute`, which re-checks the price
 ///         on-chain before acting. No keeper, no server.
 /// @dev Callback gas is billed to THIS contract in native ETH by the Callback Proxy, so keep it funded
 ///      (`receive()` + `coverDebt()`, or `CallbackProxy.depositTo(address(this))`).
-contract TripwireExecutor is AbstractCallback, IUnlockCallback, ITripwireExecutor, ReentrancyGuard {
+contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecutor, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
     using PositionInfoLibrary for PositionInfo;
@@ -81,7 +81,7 @@ contract TripwireExecutor is AbstractCallback, IUnlockCallback, ITripwireExecuto
     mapping(bytes32 poolId => uint256) public activeRuleCount;
 
     /// @param callbackProxy_ Reactive Callback Proxy on this chain (Unichain Sepolia: 0x775c…66C1).
-    /// @param reactive_ The TripwireReactive contract on Reactive Network allowed to drive callbacks.
+    /// @param reactive_ The ParallaxReactive contract on Reactive Network allowed to drive callbacks.
     /// @param poolManager_ Uniswap v4 PoolManager on this chain.
     /// @param positionManager_ Uniswap v4 PositionManager on this chain (LP NFTs for RANGE_GUARD).
     constructor(IPayable callbackProxy_, address reactive_, IPoolManager poolManager_, IPositionManager positionManager_)
@@ -201,7 +201,7 @@ contract TripwireExecutor is AbstractCallback, IUnlockCallback, ITripwireExecuto
     //  Reactive callback
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc ITripwireExecutor
+    /// @inheritdoc IParallaxExecutor
     /// @dev Guarded twice, as the Reactive docs require: `onlyServiceProvider` (msg.sender is the
     ///      Callback Proxy) AND `onlyCallbackSender` (the injected first argument is our reactive contract).
     ///      Benign failures do NOT revert; they emit RuleSkipped so the reactive contract can re-arm the

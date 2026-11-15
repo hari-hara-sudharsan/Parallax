@@ -11,8 +11,8 @@ import sys
 root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 out = root / "contracts" / "out"
 targets = {
-    "tripwireExecutorAbi": "TripwireExecutor.sol/TripwireExecutor.json",
-    "tripwireReactiveAbi": "TripwireReactive.sol/TripwireReactive.json",
+    "parallaxExecutorAbi": "ParallaxExecutor.sol/ParallaxExecutor.json",
+    "parallaxReactiveAbi": "ParallaxReactive.sol/ParallaxReactive.json",
     "poolSwapTestAbi": "PoolSwapTest.sol/PoolSwapTest.json",
     "mockErc20Abi": "MockERC20.sol/MockERC20.json",
 }

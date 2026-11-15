@@ -18,7 +18,7 @@ import {IERC20} from "forge-std/interfaces/IERC20.sol";
 ///   PUSH_DIRECTION=up    → sell mUSDC (price of WETH rises)
 ///   PUSH_AMOUNT          → whole tokens of the token being sold (default 20 WETH / 60000 USDC)
 /// Uses Uniswap's deployed PoolSwapTest router. Each run emits a v4 `Swap` event, the ORIGIN event
-/// that TripwireReactive listens to.
+/// that ParallaxReactive listens to.
 /// Run: make push-down   /   make push-up
 contract PushPrice is DemoBase {
     using PoolIdLibrary for PoolKey;

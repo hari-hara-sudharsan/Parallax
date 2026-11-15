@@ -3,7 +3,7 @@ pragma solidity ^0.8.29;
 
 import {console2} from "forge-std/Script.sol";
 import {DemoBase} from "./DemoBase.s.sol";
-import {TripwireExecutor} from "../src/TripwireExecutor.sol";
+import {ParallaxExecutor} from "../src/ParallaxExecutor.sol";
 import {RuleType, NO_LOWER, NO_UPPER} from "../src/libraries/RuleTypes.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -24,7 +24,7 @@ contract CreatePriceRule is DemoBase {
 
     function run() external {
         (uint256 pk,) = _deployer();
-        TripwireExecutor executor = TripwireExecutor(payable(_readAddress("tripwireExecutor")));
+        ParallaxExecutor executor = ParallaxExecutor(payable(_readAddress("parallaxExecutor")));
         bool takeProfit = keccak256(bytes(vm.envOr("RULE_KIND", string("stop-loss")))) == keccak256("take-profit");
         uint128 amount = uint128(vm.envOr("RULE_AMOUNT", uint256(1)) * 1 ether);
         (int24 lower, int24 upper) = _bounds(takeProfit);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tripwire task runner. Works in Git Bash (Windows), macOS and Linux.
+# Parallax task runner. Works in Git Bash (Windows), macOS and Linux.
 #   ./tw.sh help
 # The Makefile just forwards to this script, so `make <task>` == `./tw.sh <task>`.
 set -euo pipefail
@@ -44,11 +44,11 @@ case "$cmd" in
   push-down)     PUSH_DIRECTION=down uni_script script/04_PushPrice.s.sol:PushPrice ;;
   push-up)       PUSH_DIRECTION=up   uni_script script/04_PushPrice.s.sol:PushPrice ;;
 
-  # ── Tripwire core loop (Phase 2). Order is forced by the docs: Reactive → Executor → setExecutor ──
+  # ── Parallax core loop (Phase 2). Order is forced by the docs: Reactive → Executor → setExecutor ──
   deploy-reactive)  lasna_script script/05_DeployReactive.s.sol:DeployReactive ;;
   deploy-executor)  uni_script   script/06_DeployExecutor.s.sol:DeployExecutor ;;
   set-executor)     lasna_script script/07_SetExecutor.s.sol:SetExecutor ;;
-  deploy-tripwire)  "$0" deploy-reactive && "$0" deploy-executor && "$0" set-executor && "$0" debts ;;
+  deploy-parallax)  "$0" deploy-reactive && "$0" deploy-executor && "$0" set-executor && "$0" debts ;;
   create-stop-loss)   RULE_KIND=stop-loss   uni_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
   create-take-profit) RULE_KIND=take-profit uni_script script/08_CreatePriceRule.s.sol:CreatePriceRule ;;
   create-range-guard) uni_script script/09_CreateRangeGuard.s.sol:CreateRangeGuard ;;
@@ -56,37 +56,37 @@ case "$cmd" in
   # Top-ups, credited to reserves via depositTo (the docs' recommended route).
   fund-reactive)    # ./tw.sh fund-reactive 1ether
     need_env PRIVATE_KEY LASNA_RPC SYSTEM_CONTRACT
-    cast send "$SYSTEM_CONTRACT" "depositTo(address)" "$(saved 5318007 tripwireReactive)" --value "${1:-1ether}" \
+    cast send "$SYSTEM_CONTRACT" "depositTo(address)" "$(saved 5318007 parallaxReactive)" --value "${1:-1ether}" \
       --rpc-url "$LASNA_RPC" --private-key "$PRIVATE_KEY" ${LASNA_FLAGS:-} ;;
   fund-executor)    # ./tw.sh fund-executor 0.01ether
     need_env PRIVATE_KEY UNICHAIN_SEPOLIA_RPC UNICHAIN_CALLBACK_PROXY
-    cast send "$UNICHAIN_CALLBACK_PROXY" "depositTo(address)" "$(saved 1301 tripwireExecutor)" --value "${1:-0.01ether}" \
+    cast send "$UNICHAIN_CALLBACK_PROXY" "depositTo(address)" "$(saved 1301 parallaxExecutor)" --value "${1:-0.01ether}" \
       --rpc-url "$UNICHAIN_SEPOLIA_RPC" --private-key "$PRIVATE_KEY" ;;
 
   debts)            # balances / reserves / debt on both sides (any debt > 0 stops service)
-    R=$(saved 5318007 tripwireReactive || true); E=$(saved 1301 tripwireExecutor || true)
+    R=$(saved 5318007 parallaxReactive || true); E=$(saved 1301 parallaxExecutor || true)
     if [[ -n "$R" ]]; then
-      echo "TripwireReactive $R (Lasna)"
+      echo "ParallaxReactive $R (Lasna)"
       echo "  balance  $(cast balance "$R" --ether --rpc-url "$LASNA_RPC")"
       echo "  reserves $(cast call "$SYSTEM_CONTRACT" 'reserves(address)(uint256)' "$R" --rpc-url "$LASNA_RPC")"
       echo "  debt     $(cast call "$SYSTEM_CONTRACT" 'debt(address)(uint256)' "$R" --rpc-url "$LASNA_RPC")"
     fi
     if [[ -n "$E" ]]; then
-      echo "TripwireExecutor $E (Unichain Sepolia)"
+      echo "ParallaxExecutor $E (Unichain Sepolia)"
       echo "  balance  $(cast balance "$E" --ether --rpc-url "$UNICHAIN_SEPOLIA_RPC")"
       echo "  reserves $(cast call "$UNICHAIN_CALLBACK_PROXY" 'reserves(address)(uint256)' "$E" --rpc-url "$UNICHAIN_SEPOLIA_RPC")"
       echo "  debt     $(cast call "$UNICHAIN_CALLBACK_PROXY" 'debt(address)(uint256)' "$E" --rpc-url "$UNICHAIN_SEPOLIA_RPC")"
     fi ;;
 
   rule)             # ./tw.sh rule 1   → on-chain status of a rule
-    E=$(saved 1301 tripwireExecutor)
+    E=$(saved 1301 parallaxExecutor)
     cast call "$E" "getRule(uint256)((address,uint8,uint8,bool,int24,int24,uint16,uint128,uint64,bytes32,uint256))" "${1:?ruleId}" \
       --rpc-url "$UNICHAIN_SEPOLIA_RPC"
     echo "(status: 1=ACTIVE 2=EXECUTED 3=CANCELLED)" ;;
 
   proof)            # ./tw.sh proof <originSwapTx>  → finds the reactive tx + callback tx, prints a proof row
     O="${1:?origin swap tx hash}"; O=$(echo "$O" | tr 'A-F' 'a-f'); OH=${O#0x}
-    R=$(saved 5318007 tripwireReactive); E=$(saved 1301 tripwireExecutor)
+    R=$(saved 5318007 parallaxReactive); E=$(saved 1301 parallaxExecutor)
     OB=$(cast receipt "$O" blockNumber --rpc-url "$UNICHAIN_SEPOLIA_RPC")
     T0=$(cast block "$OB" --field timestamp --rpc-url "$UNICHAIN_SEPOLIA_RPC")
     # Reactive side: RuleTriggered(ruleId, poolId, tick, originTxHash) logs that carry this origin hash.
@@ -174,7 +174,7 @@ for l in json.load(sys.stdin):
 
   help|*)
     cat <<'EOF'
-Tripwire tasks (./tw.sh <task>  or  make <task>)
+Parallax tasks (./tw.sh <task>  or  make <task>)
   wallet         show deployer address + balances on every chain
   get-react <sepolia|base> <amt>  buy lREACT from the official faucet (e.g. sepolia 0.045ether)
   install        fetch git submodules (forge-std, reactive-lib-omni, v4-periphery)
@@ -189,12 +189,12 @@ Tripwire tasks (./tw.sh <task>  or  make <task>)
   pool-state     print the pool's current sqrtPrice / tick
 
 Core loop (Phase 2):
-  deploy-tripwire   deploy-reactive (Lasna) + deploy-executor (Unichain) + set-executor (Lasna) + debts
+  deploy-parallax   deploy-reactive (Lasna) + deploy-executor (Unichain) + set-executor (Lasna) + debts
   create-stop-loss    sell RULE_AMOUNT mWETH (default 1) if WETH drops RULE_MOVE_BPS (default 300 = 3%)
   create-take-profit  sell RULE_AMOUNT mWETH if WETH rises RULE_MOVE_BPS
   create-range-guard  mint a narrow LP position (±RG_WIDTH_TICKS, default 600) and guard it
-  fund-reactive [amt]   top up TripwireReactive reserves (lREACT)
-  fund-executor [amt]   top up TripwireExecutor callback reserves (ETH)
+  fund-reactive [amt]   top up ParallaxReactive reserves (lREACT)
+  fund-executor [amt]   top up ParallaxExecutor callback reserves (ETH)
   debts             balances / reserves / debt on both sides
   rule <id>         on-chain status of a rule
   abis              regenerate web/src/lib/generated/abis.ts from contracts

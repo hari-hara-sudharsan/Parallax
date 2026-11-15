@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { tripwireExecutorAbi, tripwireReactiveAbi } from "@/lib/abis";
+import { parallaxExecutorAbi, parallaxReactiveAbi } from "@/lib/abis";
 import { lasnaClient, unichainClient } from "@/lib/clients";
 import { DEPLOYMENT } from "@/lib/deployment";
 
@@ -35,7 +35,7 @@ export function useRules(owner?: Address) {
     queryFn: async (): Promise<RuleView[]> => {
       const next = await unichainClient.readContract({
         address: DEPLOYMENT.executor,
-        abi: tripwireExecutorAbi,
+        abi: parallaxExecutorAbi,
         functionName: "nextRuleId",
       });
       const ids = Array.from({ length: Number(next) - 1 }, (_, i) => BigInt(i + 1));
@@ -43,7 +43,7 @@ export function useRules(owner?: Address) {
         ids.map((id) =>
           unichainClient.readContract({
             address: DEPLOYMENT.executor,
-            abi: tripwireExecutorAbi,
+            abi: parallaxExecutorAbi,
             functionName: "getRule",
             args: [id],
           }),
@@ -61,7 +61,7 @@ export function useRules(owner?: Address) {
             try {
               const m = await lasnaClient.readContract({
                 address: DEPLOYMENT.reactive,
-                abi: tripwireReactiveAbi,
+                abi: parallaxReactiveAbi,
                 functionName: "mirror",
                 args: [id],
               });

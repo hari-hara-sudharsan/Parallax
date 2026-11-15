@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Tripwire design tokens. Dark, precise, trading-desk feel: one neutral ramp + one colour per
+ * Parallax design tokens. Dark, precise, trading-desk feel: one neutral ramp + one colour per
  * rule state, so colour always means the same thing:
  *   active = blue · triggered (in flight) = amber · executed = green · cancelled = grey · danger = red
  */

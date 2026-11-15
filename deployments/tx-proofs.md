@@ -1,6 +1,8 @@
 # Full-loop proofs: origin event → reactive tx → callback tx
 
-Each row is one complete, unattended Tripwire execution on testnet. No keeper and no script triggered the callback:
+> **Naming note:** the project was renamed from its working name *Tripwire* to **Parallax** on 2026-11-15 (another buildathon entry uses that name). Deployments v1/v2 and Runs 1–3 below were made before the rename: same code, same events; only identifiers changed.
+
+Each row is one complete, unattended Parallax execution on testnet. No keeper and no script triggered the callback:
 Reactive Network saw the origin event and did the rest. Reproduce any row with `./tw.sh proof <originTx>`.
 
 ## Summary (for the README / submission)

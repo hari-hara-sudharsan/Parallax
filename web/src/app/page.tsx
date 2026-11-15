@@ -7,8 +7,8 @@ import { MyRules } from "@/components/MyRules";
 import { DEPLOYMENT, LINKS } from "@/lib/deployment";
 
 const FLOW = [
-  { n: "1", title: "You arm a rule", body: "Deposit tokens or an LP NFT into TripwireExecutor on Unichain. It emits RuleCreated." },
-  { n: "2", title: "Reactive mirrors it", body: "TripwireReactive on Lasna picks up the event and subscribes to that pool's swaps." },
+  { n: "1", title: "You arm a rule", body: "Deposit tokens or an LP NFT into ParallaxExecutor on Unichain. It emits RuleCreated." },
+  { n: "2", title: "Reactive mirrors it", body: "ParallaxReactive on Lasna picks up the event and subscribes to that pool's swaps." },
   { n: "3", title: "Price crosses", body: "Any swap that moves the tick past your line reaches react() about a second later." },
   { n: "4", title: "Callback executes", body: "The executor re-checks the price on-chain, then swaps or withdraws your position." },
 ];

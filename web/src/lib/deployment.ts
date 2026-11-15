@@ -7,9 +7,9 @@ import type { Address, Hex } from "viem";
 const env = (k: string) => process.env[k] as string | undefined;
 
 export const DEPLOYMENT = {
-  // Tripwire v2
-  executor: (env("NEXT_PUBLIC_TRIPWIRE_EXECUTOR") ?? "0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af") as Address,
-  reactive: (env("NEXT_PUBLIC_TRIPWIRE_REACTIVE") ?? "0xC3C04592057E816EB706eF0E9A9438267537B2A2") as Address,
+  // Parallax v2
+  executor: (env("NEXT_PUBLIC_PARALLAX_EXECUTOR") ?? "0x87Ce29239B4F63a2C00DDa8F6e058ACDeB9181af") as Address,
+  reactive: (env("NEXT_PUBLIC_PARALLAX_REACTIVE") ?? "0xC3C04592057E816EB706eF0E9A9438267537B2A2") as Address,
   executorDeployBlock: BigInt(env("NEXT_PUBLIC_EXECUTOR_DEPLOY_BLOCK") ?? "67867605"),
 
   // Demo pool (mUSDC/mWETH 0.30%, no hooks)

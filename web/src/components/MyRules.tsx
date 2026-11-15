@@ -4,7 +4,7 @@ import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
 import { useRules, type RuleView } from "@/hooks/useRules";
 import { useTxFlow } from "@/hooks/useTxFlow";
-import { tripwireExecutorAbi } from "@/lib/abis";
+import { parallaxExecutorAbi } from "@/lib/abis";
 import { DEPLOYMENT, LINKS, WETH_DECIMALS } from "@/lib/deployment";
 import { boundsToPrices, fmtToken, fmtUsd, tickToPrice } from "@/lib/price";
 import { unichainSepolia } from "@/lib/chains";
@@ -67,7 +67,7 @@ export function MyRules() {
                     flow.run([
                       {
                         label: "Cancel",
-                        request: { address: DEPLOYMENT.executor, abi: tripwireExecutorAbi, functionName: "cancelRule", args: [r.id], chainId: unichainSepolia.id },
+                        request: { address: DEPLOYMENT.executor, abi: parallaxExecutorAbi, functionName: "cancelRule", args: [r.id], chainId: unichainSepolia.id },
                       },
                     ])
                   }
@@ -83,11 +83,11 @@ export function MyRules() {
       <p className="mt-4 text-[11px] text-faint">
         Rules live in{" "}
         <a className="underline decoration-line underline-offset-2 hover:text-muted" href={LINKS.unichainAddress(DEPLOYMENT.executor)} target="_blank" rel="noreferrer">
-          TripwireExecutor
+          ParallaxExecutor
         </a>{" "}
         and are mirrored by{" "}
         <a className="underline decoration-line underline-offset-2 hover:text-muted" href={LINKS.lasnaAddress(DEPLOYMENT.reactive)} target="_blank" rel="noreferrer">
-          TripwireReactive
+          ParallaxReactive
         </a>{" "}
         on Reactive Lasna.
       </p>

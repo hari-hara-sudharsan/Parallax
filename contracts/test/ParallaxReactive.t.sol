@@ -4,13 +4,13 @@ pragma solidity ^0.8.29;
 import {Test} from "forge-std/Test.sol";
 import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {AbstractPayer} from "reactive-lib-omni/base/AbstractPayer.sol";
-import {TripwireReactive} from "../src/TripwireReactive.sol";
-import {ITripwireExecutor} from "../src/interfaces/ITripwireExecutor.sol";
+import {ParallaxReactive} from "../src/ParallaxReactive.sol";
+import {IParallaxExecutor} from "../src/interfaces/IParallaxExecutor.sol";
 import {RuleType, SkipReason, NO_LOWER, NO_UPPER} from "../src/libraries/RuleTypes.sol";
 import {MockSystemContract} from "./mocks/MockSystemContract.sol";
 
-/// @notice Unit tests of TripwireReactive's decision logic with hand-built LogRecords (no chain needed).
-contract TripwireReactiveTest is Test {
+/// @notice Unit tests of ParallaxReactive's decision logic with hand-built LogRecords (no chain needed).
+contract ParallaxReactiveTest is Test {
     address constant SYSTEM = 0x8888888888888888888888888888888888888888;
     uint256 constant REACTIVE_IGNORE = 0xa65f96fc951c35ead38878e0f0b7a3c744a6f5ccc1476b313353ce31712313ad;
     uint256 constant CHAIN = 1301;
@@ -19,14 +19,14 @@ contract TripwireReactiveTest is Test {
     bytes32 constant POOL = keccak256("pool");
     bytes32 constant OTHER_POOL = keccak256("other-pool");
 
-    TripwireReactive reactive;
+    ParallaxReactive reactive;
     MockSystemContract sys;
 
     function setUp() public {
         vm.etch(SYSTEM, address(new MockSystemContract()).code);
         sys = MockSystemContract(payable(SYSTEM));
         vm.warp(1_800_000_000);
-        reactive = new TripwireReactive(CHAIN, POOL_MANAGER, CHAIN);
+        reactive = new ParallaxReactive(CHAIN, POOL_MANAGER, CHAIN);
         reactive.setExecutor(EXECUTOR);
     }
 
@@ -87,10 +87,10 @@ contract TripwireReactiveTest is Test {
     // ── Wiring ──────────────────────────────────────────────────────────────
 
     function test_topicConstantsMatchExecutorEvents() public view {
-        assertEq(reactive.RULE_CREATED_TOPIC0(), uint256(ITripwireExecutor.RuleCreated.selector));
-        assertEq(reactive.RULE_CANCELLED_TOPIC0(), uint256(ITripwireExecutor.RuleCancelled.selector));
-        assertEq(reactive.RULE_EXECUTED_TOPIC0(), uint256(ITripwireExecutor.RuleExecuted.selector));
-        assertEq(reactive.RULE_SKIPPED_TOPIC0(), uint256(ITripwireExecutor.RuleSkipped.selector));
+        assertEq(reactive.RULE_CREATED_TOPIC0(), uint256(IParallaxExecutor.RuleCreated.selector));
+        assertEq(reactive.RULE_CANCELLED_TOPIC0(), uint256(IParallaxExecutor.RuleCancelled.selector));
+        assertEq(reactive.RULE_EXECUTED_TOPIC0(), uint256(IParallaxExecutor.RuleExecuted.selector));
+        assertEq(reactive.RULE_SKIPPED_TOPIC0(), uint256(IParallaxExecutor.RuleSkipped.selector));
         assertEq(reactive.SWAP_TOPIC0(), 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f);
     }
 
@@ -109,12 +109,12 @@ contract TripwireReactiveTest is Test {
     }
 
     function test_setExecutor_onlyOnce_onlyOwner() public {
-        vm.expectRevert(TripwireReactive.ExecutorAlreadySet.selector);
+        vm.expectRevert(ParallaxReactive.ExecutorAlreadySet.selector);
         reactive.setExecutor(address(1));
 
-        TripwireReactive fresh = new TripwireReactive(CHAIN, POOL_MANAGER, CHAIN);
+        ParallaxReactive fresh = new ParallaxReactive(CHAIN, POOL_MANAGER, CHAIN);
         vm.prank(address(0xBAD));
-        vm.expectRevert(TripwireReactive.NotOwner.selector);
+        vm.expectRevert(ParallaxReactive.NotOwner.selector);
         fresh.setExecutor(address(1));
     }
 
@@ -193,7 +193,7 @@ contract TripwireReactiveTest is Test {
         assertEq(cb.gasLimit, reactive.CALLBACK_GAS_LIMIT());
         // First arg MUST be the address(0) placeholder that Reactive Network overwrites.
         assertEq(
-            cb.payload, abi.encodeCall(ITripwireExecutor.execute, (address(0), uint256(1), int24(-150), s.txHash))
+            cb.payload, abi.encodeCall(IParallaxExecutor.execute, (address(0), uint256(1), int24(-150), s.txHash))
         );
         (,,,, uint64 pending,) = reactive.mirror(1);
         assertEq(pending, block.timestamp);

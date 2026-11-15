@@ -3,13 +3,13 @@ pragma solidity ^0.8.29;
 
 import {console2} from "forge-std/Script.sol";
 import {DemoBase} from "./DemoBase.s.sol";
-import {TripwireExecutor} from "../src/TripwireExecutor.sol";
+import {ParallaxExecutor} from "../src/ParallaxExecutor.sol";
 import {IPayable} from "reactive-lib-omni/interfaces/IPayable.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 
-/// @notice Phase 2, step B (on UNICHAIN SEPOLIA): deploy TripwireExecutor bound to the Callback Proxy
-///         and to the TripwireReactive address from step A (stored immutably, so get it right).
+/// @notice Phase 2, step B (on UNICHAIN SEPOLIA): deploy ParallaxExecutor bound to the Callback Proxy
+///         and to the ParallaxReactive address from step A (stored immutably, so get it right).
 ///         Funded with ETH because the Callback Proxy bills callback gas to this contract.
 /// Run: ./tw.sh deploy-executor        (EXECUTOR_FUNDING in wei, default 0.01 ETH)
 contract DeployExecutor is DemoBase {
@@ -19,18 +19,18 @@ contract DeployExecutor is DemoBase {
         address proxy = vm.envAddress("UNICHAIN_CALLBACK_PROXY");
         address poolManager = vm.envAddress("POOL_MANAGER");
         address positionManager = vm.envAddress("POSITION_MANAGER");
-        address reactive = _readAddressFrom(LASNA, "tripwireReactive");
+        address reactive = _readAddressFrom(LASNA, "parallaxReactive");
         uint256 funding = vm.envOr("EXECUTOR_FUNDING", uint256(0.01 ether));
 
         vm.startBroadcast(pk);
-        TripwireExecutor executor =
-            new TripwireExecutor{value: funding}(
+        ParallaxExecutor executor =
+            new ParallaxExecutor{value: funding}(
             IPayable(payable(proxy)), reactive, IPoolManager(poolManager), IPositionManager(positionManager)
         );
         vm.stopBroadcast();
 
-        console2.log("TripwireExecutor (Unichain Sepolia):", address(executor));
+        console2.log("ParallaxExecutor (Unichain Sepolia):", address(executor));
         console2.log("authorized reactive sender:", reactive);
-        _save("tripwireExecutor", address(executor));
+        _save("parallaxExecutor", address(executor));
     }
 }

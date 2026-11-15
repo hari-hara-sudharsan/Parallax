@@ -1,6 +1,6 @@
 // AUTO-GENERATED from Foundry artifacts by `./tw.sh abis`. Do not edit by hand.
 
-export const tripwireExecutorAbi = [
+export const parallaxExecutorAbi = [
   {
     "type": "constructor",
     "inputs": [
@@ -959,7 +959,7 @@ export const tripwireExecutorAbi = [
   }
 ] as const;
 
-export const tripwireReactiveAbi = [
+export const parallaxReactiveAbi = [
   {
     "type": "constructor",
     "inputs": [

@@ -22,9 +22,9 @@ import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
-import {TripwireExecutor} from "../src/TripwireExecutor.sol";
-import {TripwireReactive} from "../src/TripwireReactive.sol";
-import {ITripwireExecutor} from "../src/interfaces/ITripwireExecutor.sol";
+import {ParallaxExecutor} from "../src/ParallaxExecutor.sol";
+import {ParallaxReactive} from "../src/ParallaxReactive.sol";
+import {IParallaxExecutor} from "../src/interfaces/IParallaxExecutor.sol";
 import {Rule, RuleType, RuleStatus, SkipReason, NO_LOWER, NO_UPPER} from "../src/libraries/RuleTypes.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {PoolMath} from "../src/libraries/PoolMath.sol";
@@ -34,7 +34,7 @@ import {MockSystemContract} from "./mocks/MockSystemContract.sol";
 ///         PoolManager and the REAL Reactive Callback Proxy address (we impersonate it, exactly as
 ///         Reactive Network's signer would call through it).
 /// @dev Needs network access. RPC: $UNICHAIN_SEPOLIA_RPC (defaults to the public endpoint).
-contract TripwireForkTest is Test {
+contract ParallaxForkTest is Test {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
@@ -54,8 +54,8 @@ contract TripwireForkTest is Test {
     bytes32 poolId;
     bool wethIs0;
 
-    TripwireReactive reactive;
-    TripwireExecutor executor;
+    ParallaxReactive reactive;
+    ParallaxExecutor executor;
     MockSystemContract sys;
 
     address alice = makeAddr("alice");
@@ -88,8 +88,8 @@ contract TripwireForkTest is Test {
         // Mock Omni system contract, then the real deployment order: Reactive → Executor → setExecutor.
         vm.etch(SYSTEM, address(new MockSystemContract()).code);
         sys = MockSystemContract(payable(SYSTEM));
-        reactive = new TripwireReactive(CHAIN, address(PM), CHAIN);
-        executor = new TripwireExecutor(IPayable(payable(CALLBACK_PROXY)), address(reactive), PM, POSM);
+        reactive = new ParallaxReactive(CHAIN, address(PM), CHAIN);
+        executor = new ParallaxExecutor(IPayable(payable(CALLBACK_PROXY)), address(reactive), PM, POSM);
         reactive.setExecutor(address(executor));
 
         weth.mint(alice, 100 ether);
@@ -142,7 +142,7 @@ contract TripwireForkTest is Test {
         vm.stopPrank();
     }
 
-    /// @dev Alice's LP position on [tick-600, tick+600) (rounded to spacing), guarded by Tripwire.
+    /// @dev Alice's LP position on [tick-600, tick+600) (rounded to spacing), guarded by Parallax.
     function _createRangeGuard() internal returns (uint256 ruleId, uint256 positionId, int24 tl, int24 tu) {
         tl = PoolMath.floorToSpacing(_tick(), 60) - 600;
         tu = PoolMath.floorToSpacing(_tick(), 60) + 600;
@@ -225,24 +225,24 @@ contract TripwireForkTest is Test {
     function test_createRule_rejectsTriggerAlreadyHit() public {
         int24 t = _tick();
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.TriggerAlreadyHit.selector, t));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.TriggerAlreadyHit.selector, t));
         executor.createRule(key, RuleType.STOP_LOSS, wethIs0, t + 60, NO_UPPER, 1 ether, 100); // tick <= t+60 now
     }
 
     function test_createRule_validatesInputs() public {
         (bool z, int24 lower, int24 upper) = _stopLossParams();
         vm.startPrank(alice);
-        vm.expectRevert(TripwireExecutor.ZeroAmount.selector);
+        vm.expectRevert(ParallaxExecutor.ZeroAmount.selector);
         executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 0, 100);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.SlippageTooHigh.selector, 2001, 2000));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.SlippageTooHigh.selector, 2001, 2000));
         executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 1 ether, 2001);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.SlippageTooLow.selector, 10, 50));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.SlippageTooLow.selector, 10, 50));
         executor.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 1 ether, 10);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.UnsupportedRuleType.selector, RuleType.RANGE_GUARD));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.UnsupportedRuleType.selector, RuleType.RANGE_GUARD));
         executor.createRule(key, RuleType.RANGE_GUARD, z, lower, upper, 1 ether, 100);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.InvalidBounds.selector, NO_LOWER, NO_UPPER));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.InvalidBounds.selector, NO_LOWER, NO_UPPER));
         executor.createRule(key, RuleType.STOP_LOSS, z, NO_LOWER, NO_UPPER, 1 ether, 100);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.InvalidBounds.selector, int24(100), int24(-100)));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.InvalidBounds.selector, int24(100), int24(-100)));
         executor.createRule(key, RuleType.STOP_LOSS, z, 100, -100, 1 ether, 100);
         vm.stopPrank();
     }
@@ -259,11 +259,11 @@ contract TripwireForkTest is Test {
 
     function test_cancelRule_onlyOwner_onlyOnce() public {
         uint256 id = _createStopLoss(1 ether, 100);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.NotRuleOwner.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.NotRuleOwner.selector, id));
         executor.cancelRule(id);
         vm.startPrank(alice);
         executor.cancelRule(id);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.RuleNotActive.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.RuleNotActive.selector, id));
         executor.cancelRule(id);
         vm.stopPrank();
     }
@@ -317,7 +317,7 @@ contract TripwireForkTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool sawExecuted;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == ITripwireExecutor.RuleExecuted.selector) sawExecuted = true;
+            if (logs[i].topics[0] == IParallaxExecutor.RuleExecuted.selector) sawExecuted = true;
         }
         assertTrue(sawExecuted);
     }
@@ -329,7 +329,7 @@ contract TripwireForkTest is Test {
         assertFalse(executor.isTriggered(id));
 
         vm.expectEmit(true, false, false, false, address(executor));
-        emit ITripwireExecutor.RuleSkipped(id, SkipReason.CONDITION_NOT_MET, 0, 0);
+        emit IParallaxExecutor.RuleSkipped(id, SkipReason.CONDITION_NOT_MET, 0, 0);
         _callbackFromProxy(id);
 
         assertEq(weth.balanceOf(address(executor)), 1 ether, "funds untouched");
@@ -343,7 +343,7 @@ contract TripwireForkTest is Test {
         uint256 usdcAfterFirst = usdc.balanceOf(alice);
 
         vm.expectEmit(true, false, false, false, address(executor));
-        emit ITripwireExecutor.RuleSkipped(id, SkipReason.NOT_ACTIVE, 0, 0);
+        emit IParallaxExecutor.RuleSkipped(id, SkipReason.NOT_ACTIVE, 0, 0);
         _callbackFromProxy(id);
         assertEq(usdc.balanceOf(alice), usdcAfterFirst);
     }
@@ -355,7 +355,7 @@ contract TripwireForkTest is Test {
         _crash(30 ether);
 
         vm.expectEmit(true, false, false, false, address(executor));
-        emit ITripwireExecutor.RuleSkipped(id, SkipReason.ACTION_FAILED, 0, 0);
+        emit IParallaxExecutor.RuleSkipped(id, SkipReason.ACTION_FAILED, 0, 0);
         _callbackFromProxy(id);
 
         assertEq(weth.balanceOf(address(executor)), 60 ether, "deposit intact");
@@ -369,12 +369,12 @@ contract TripwireForkTest is Test {
         executor.cancelRule(id);
         _crash(30 ether);
         vm.expectEmit(true, false, false, false, address(executor));
-        emit ITripwireExecutor.RuleSkipped(id, SkipReason.NOT_ACTIVE, 0, 0);
+        emit IParallaxExecutor.RuleSkipped(id, SkipReason.NOT_ACTIVE, 0, 0);
         _callbackFromProxy(id);
     }
 
     function test_unlockCallback_onlyPoolManager() public {
-        vm.expectRevert(TripwireExecutor.NotPoolManager.selector);
+        vm.expectRevert(ParallaxExecutor.NotPoolManager.selector);
         executor.unlockCallback("");
     }
 
@@ -508,7 +508,7 @@ contract TripwireForkTest is Test {
     function test_rangeGuard_rejectsSomeoneElsesPosition() public {
         int24 base = PoolMath.floorToSpacing(_tick(), 60);
         uint256 positionId = _mintPositionForAlice(base - 600, base + 600, 1e15);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.NotPositionOwner.selector, positionId));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.NotPositionOwner.selector, positionId));
         executor.createRangeGuard(positionId, 100);
     }
 
@@ -517,7 +517,7 @@ contract TripwireForkTest is Test {
         uint256 positionId = _mintPositionForAlice(base + 600, base + 1200, 1e15);
         vm.startPrank(alice);
         IERC721(address(POSM)).approve(address(executor), positionId);
-        vm.expectRevert(abi.encodeWithSelector(TripwireExecutor.TriggerAlreadyHit.selector, _tick()));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.TriggerAlreadyHit.selector, _tick()));
         executor.createRangeGuard(positionId, 100);
         vm.stopPrank();
     }
@@ -534,7 +534,7 @@ contract TripwireForkTest is Test {
         (uint256 id, uint256 positionId,,) = _createRangeGuard();
         _crash(0.5 ether); // small move, still inside [tl, tu)
         vm.expectEmit(true, false, false, false, address(executor));
-        emit ITripwireExecutor.RuleSkipped(id, SkipReason.CONDITION_NOT_MET, 0, 0);
+        emit IParallaxExecutor.RuleSkipped(id, SkipReason.CONDITION_NOT_MET, 0, 0);
         _callbackFromProxy(id);
         assertEq(IERC721(address(POSM)).ownerOf(positionId), address(executor));
     }

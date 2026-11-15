@@ -1,5 +1,5 @@
-/** ABIs used by the app. Tripwire + mocks are generated from the Foundry build (see ./generated). */
-export { tripwireExecutorAbi, tripwireReactiveAbi, poolSwapTestAbi, mockErc20Abi } from "./generated/abis";
+/** ABIs used by the app. Parallax + mocks are generated from the Foundry build (see ./generated). */
+export { parallaxExecutorAbi, parallaxReactiveAbi, poolSwapTestAbi, mockErc20Abi } from "./generated/abis";
 
 /** Uniswap v4 StateView (lens over PoolManager storage). */
 export const stateViewAbi = [

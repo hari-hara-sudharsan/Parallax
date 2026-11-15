@@ -3,11 +3,11 @@ pragma solidity ^0.8.29;
 
 import {RuleType, SkipReason} from "../libraries/RuleTypes.sol";
 
-/// @title ITripwireExecutor
+/// @title IParallaxExecutor
 /// @notice Events + callback entrypoint of the destination contract.
-/// @dev TripwireReactive subscribes to these events (topic0 = the event selectors below), so their
+/// @dev ParallaxReactive subscribes to these events (topic0 = the event selectors below), so their
 ///      signatures and indexed layout are part of the cross-chain protocol. Change them in one place only.
-interface ITripwireExecutor {
+interface IParallaxExecutor {
     /// @notice A rule was created (tokens deposited, or LP position NFT handed over).
     /// @dev Log layout (LOG4): topic1 = ruleId, topic2 = owner, topic3 = poolId,
     ///      data = abi.encode(ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId).

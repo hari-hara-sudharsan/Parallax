@@ -6,7 +6,7 @@ import { useActivity } from "@/hooks/useActivity";
 import { fmtUsd } from "@/lib/price";
 import { cx } from "./ui";
 
-/** Top band: the live price being watched, and the headline number, i.e. how fast Tripwire reacted. */
+/** Top band: the live price being watched, and the headline number, i.e. how fast Parallax reacted. */
 export function Hero() {
   const { price, tick } = usePool();
   const { data: feed } = useActivity();
@@ -35,13 +35,13 @@ export function Hero() {
       <div className="grid-bg pointer-events-none absolute inset-0" />
       <div className="relative mx-auto grid max-w-6xl gap-4 px-4 py-10 md:grid-cols-[1.4fr_1fr] md:py-14">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-faint">Reactive Omni · Uniswap v4</p>
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-faint">Parallax · Reactive Omni × Uniswap v4</p>
           <h1 className="mt-3 max-w-xl text-3xl font-semibold leading-tight tracking-tight md:text-[42px]">
             Stop-losses and LP range guards that fire in about a second.
           </h1>
           <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-muted">
-            Set a rule once. A reactive contract watches every swap and the moment the price crosses your line it
-            calls back and executes. No keeper bots, no server.
+            A guard that watches your position from a parallel chain. Set a rule once; the moment a swap crosses
+            your line, a reactive contract calls back and executes. No keeper bots, no server.
           </p>
 
           <div className="mt-7 inline-flex items-end gap-5 rounded-2xl border border-line bg-panel/80 px-5 py-4 backdrop-blur">

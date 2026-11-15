@@ -3,7 +3,7 @@ pragma solidity ^0.8.29;
 
 import {console2} from "forge-std/Script.sol";
 import {DemoBase} from "./DemoBase.s.sol";
-import {TripwireExecutor} from "../src/TripwireExecutor.sol";
+import {ParallaxExecutor} from "../src/ParallaxExecutor.sol";
 import {PoolMath} from "../src/libraries/PoolMath.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -16,7 +16,7 @@ import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
 /// @notice Demo: mint a NARROW LP position around the current price (±RG_WIDTH_TICKS, default 600 ≈ ±6%)
-///         and hand it to Tripwire as a RANGE_GUARD. When the price leaves the range, the position's
+///         and hand it to Parallax as a RANGE_GUARD. When the price leaves the range, the position's
 ///         liquidity + fees are withdrawn back to you automatically.
 ///         To guard an existing position instead, set RG_POSITION_ID.
 /// Run: ./tw.sh create-range-guard
@@ -26,7 +26,7 @@ contract CreateRangeGuard is DemoBase {
 
     function run() external {
         (uint256 pk, address me) = _deployer();
-        TripwireExecutor executor = TripwireExecutor(payable(_readAddress("tripwireExecutor")));
+        ParallaxExecutor executor = ParallaxExecutor(payable(_readAddress("parallaxExecutor")));
         IPositionManager posm = IPositionManager(vm.envAddress("POSITION_MANAGER"));
         uint256 positionId = vm.envOr("RG_POSITION_ID", uint256(0));
 
