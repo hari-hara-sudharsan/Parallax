@@ -36,6 +36,10 @@ contract ParallaxReactive is AbstractReactive {
     event RuleRemoved(uint256 indexed chainId, uint256 indexed ruleId, bytes32 indexed poolId);
     event RuleRearmed(uint256 indexed chainId, uint256 indexed ruleId);
     event MirrorFull(uint256 indexed chainId, uint256 indexed ruleId, bytes32 indexed poolId);
+    /// @notice A trailing stop has room to tighten; a raiseTrail callback was requested in this tx.
+    event TrailRaiseRequested(uint256 indexed chainId, uint256 indexed ruleId, int24 tick);
+    /// @notice The executor moved a trailing stop (or confirmed it unchanged); the mirror follows.
+    event MirrorUpdated(uint256 indexed chainId, uint256 indexed ruleId, int24 lowerTick, int24 upperTick);
     /// @notice A swap crossed the rule; a callback to that chain's executor was requested in this tx.
     event RuleTriggered(
         uint256 indexed chainId, uint256 indexed ruleId, bytes32 indexed poolId, int24 tick, uint256 originTxHash
@@ -50,14 +54,17 @@ contract ParallaxReactive is AbstractReactive {
     /// @dev Executor events (enums encode as uint8). A unit test asserts these equal the
     ///      `IParallaxExecutor.<Event>.selector` values so the two contracts can never drift apart.
     uint256 public constant RULE_CREATED_TOPIC0 =
-        uint256(keccak256("RuleCreated(uint256,address,bytes32,uint8,int24,int24,bool,uint128,uint256)"));
+        uint256(keccak256("RuleCreated(uint256,address,bytes32,uint8,int24,int24,bool,uint128,uint256,int24)"));
     uint256 public constant RULE_CANCELLED_TOPIC0 = uint256(keccak256("RuleCancelled(uint256,address)"));
     uint256 public constant RULE_EXECUTED_TOPIC0 =
         uint256(keccak256("RuleExecuted(uint256,address,int24,uint256,uint256,uint256,uint256,uint256)"));
     uint256 public constant RULE_SKIPPED_TOPIC0 = uint256(keccak256("RuleSkipped(uint256,uint8,int24,uint256)"));
+    uint256 public constant RULE_UPDATED_TOPIC0 = uint256(keccak256("RuleUpdated(uint256,int24,int24)"));
 
-    /// @notice Gas forwarded to `execute` on the destination (≥ 100k network minimum; swap ≈ 170k, LP ≈ 250k).
-    uint64 public constant CALLBACK_GAS_LIMIT = 1_000_000;
+    /// @notice Gas limit for `execute` callbacks. Measured: swap ≈ 220k, LP withdraw ≈ 300k, LP re-centre ≈ 900k.
+    /// @dev The Callback Proxy keeps ~130k of the limit for its own accounting (`_extraGas` + `_maxChargeGas`),
+    ///      and callbacks are billed on gas USED, not on the limit, so a generous limit costs nothing extra.
+    uint64 public constant CALLBACK_GAS_LIMIT = 2_000_000;
     /// @notice Must match ParallaxExecutor.MAX_ACTIVE_RULES_PER_POOL so the mirror never overflows.
     uint256 public constant MAX_RULES_PER_POOL = 25;
     /// @notice Bound on callbacks requested per Swap. Extra triggered rules fire on the next swap.
@@ -68,6 +75,11 @@ contract ParallaxReactive is AbstractReactive {
     /// @notice If neither RuleExecuted nor RuleSkipped arrives within this many seconds of a trigger
     ///         (e.g. the callback was dropped), the rule becomes eligible to fire again. Timestamp-based.
     uint256 public constant PENDING_TIMEOUT = 120;
+    /// @notice A trailing stop is only raised when it can tighten by at least this many ticks (≈ bps),
+    ///         so a slowly rising price costs a raise every 0.2% instead of one per swap.
+    int24 public constant TRAIL_STEP_TICKS = 20;
+    /// @notice Gas for a raiseTrail callback (one storage write + event; ≥ the 100k network minimum).
+    uint64 public constant RAISE_GAS_LIMIT = 200_000;
 
     // ── Config ──────────────────────────────────────────────────────────────
     struct ChainConfig {
@@ -91,6 +103,8 @@ contract ParallaxReactive is AbstractReactive {
         bool exists;
         uint64 pendingSince; // 0 = armed; otherwise block.timestamp of the callback request
         uint32 index; //        position in the pool's rule list (for O(1) removal)
+        int24 trailTicks; //    trailing stop distance (0 = fixed bound)
+        uint64 raiseSince; //   0 = no raise in flight; otherwise block.timestamp of the request
     }
 
     mapping(uint256 key => MirrorRule) internal _mirror;
@@ -118,8 +132,10 @@ contract ParallaxReactive is AbstractReactive {
         chains[chainId] = ChainConfig(poolManager, executor);
         chainIds.push(chainId);
 
-        uint256[4] memory topics = [RULE_CREATED_TOPIC0, RULE_CANCELLED_TOPIC0, RULE_EXECUTED_TOPIC0, RULE_SKIPPED_TOPIC0];
-        for (uint256 i; i < 4; ++i) {
+        uint256[5] memory topics = [
+            RULE_CREATED_TOPIC0, RULE_CANCELLED_TOPIC0, RULE_EXECUTED_TOPIC0, RULE_SKIPPED_TOPIC0, RULE_UPDATED_TOPIC0
+        ];
+        for (uint256 i; i < 5; ++i) {
             SYSTEM.subscribe(chainId, executor, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
         }
         emit ChainAdded(chainId, poolManager, executor);
@@ -157,6 +173,8 @@ contract ParallaxReactive is AbstractReactive {
             _removeRule(log_.chainId, log_.topic1);
         } else if (t0 == RULE_SKIPPED_TOPIC0) {
             _rearm(log_.chainId, log_.topic1);
+        } else if (t0 == RULE_UPDATED_TOPIC0) {
+            _onRuleUpdated(log_);
         }
     }
 
@@ -169,9 +187,9 @@ contract ParallaxReactive is AbstractReactive {
         uint256 key = _key(chainId, ruleId);
         if (_mirror[key].exists) return; // duplicate delivery
 
-        // data = (ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId)
-        (, int24 lowerTick, int24 upperTick,,,) =
-            abi.decode(log_.data, (RuleType, int24, int24, bool, uint128, uint256));
+        // data = (ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId, trailTicks)
+        (, int24 lowerTick, int24 upperTick,,,, int24 trailTicks) =
+            abi.decode(log_.data, (RuleType, int24, int24, bool, uint128, uint256, int24));
 
         uint256[] storage list = _poolRules[_poolKey(chainId, poolId)];
         if (list.length >= MAX_RULES_PER_POOL) {
@@ -186,7 +204,9 @@ contract ParallaxReactive is AbstractReactive {
             upperTick: upperTick,
             exists: true,
             pendingSince: 0,
-            index: uint32(list.length)
+            index: uint32(list.length),
+            trailTicks: trailTicks,
+            raiseSince: 0
         });
         list.push(ruleId);
         emit RuleMirrored(chainId, ruleId, poolId, lowerTick, upperTick);
@@ -212,12 +232,48 @@ contract ParallaxReactive is AbstractReactive {
         MirrorRule storage m = _mirror[_key(log_.chainId, ruleId)];
         bool armed = m.pendingSince == 0 || block.timestamp >= m.pendingSince + PENDING_TIMEOUT;
         if (!armed) return false;
-        if (tick > m.lowerTick && tick < m.upperTick) return false; // still inside the safe band
+        if (tick > m.lowerTick && tick < m.upperTick) return m.trailTicks != 0 && _tryRaise(m, ruleId, tick, log_, executor);
 
         m.pendingSince = uint64(block.timestamp); // de-dupe: one in-flight callback per rule
         _requestExecute(log_.chainId, executor, ruleId, tick, log_);
         emit RuleTriggered(log_.chainId, ruleId, m.poolId, tick, log_.txHash);
         return true;
+    }
+
+    /// @dev Trailing stop: if the price has improved enough that the stop could tighten by at least
+    ///      TRAIL_STEP_TICKS, ask the executor to raise it. One raise in flight per rule (timestamp timeout).
+    function _tryRaise(MirrorRule storage m, uint256 ruleId, int24 tick, LogRecord memory log_, address executor)
+        internal
+        returns (bool)
+    {
+        if (m.raiseSince != 0 && block.timestamp < m.raiseSince + PENDING_TIMEOUT) return false;
+        bool roomToTighten = m.lowerTick != type(int24).min
+            ? tick - m.trailTicks >= m.lowerTick + TRAIL_STEP_TICKS
+            : tick + m.trailTicks <= m.upperTick - TRAIL_STEP_TICKS;
+        if (!roomToTighten) return false;
+
+        m.raiseSince = uint64(block.timestamp);
+        SYSTEM.requestCallbackV_1_0(
+            ISystemContract.CallbackConfiguration_V_1_0({
+                chainId: log_.chainId,
+                recipient: executor,
+                gasLimit: RAISE_GAS_LIMIT,
+                payload: abi.encodeCall(IParallaxExecutor.raiseTrail, (address(0), ruleId, tick))
+            })
+        );
+        emit TrailRaiseRequested(log_.chainId, ruleId, tick);
+        return true;
+    }
+
+    /// @dev RuleUpdated(ruleId, lowerTick, upperTick): the executor's authoritative bounds.
+    function _onRuleUpdated(LogRecord memory log_) internal {
+        MirrorRule storage m = _mirror[_key(log_.chainId, log_.topic1)];
+        if (!m.exists) return;
+        (int24 lowerTick, int24 upperTick) = abi.decode(log_.data, (int24, int24));
+        m.lowerTick = lowerTick;
+        m.upperTick = upperTick;
+        m.raiseSince = 0;
+        emit MirrorUpdated(log_.chainId, log_.topic1, lowerTick, upperTick);
     }
 
     function _rearm(uint256 chainId, uint256 ruleId) internal {
