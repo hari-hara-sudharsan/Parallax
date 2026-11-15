@@ -1,8 +1,10 @@
 {
-  "parallaxReactive": "0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042",
-  "parallaxReactiveBlock": 8396898,
+  "parallaxReactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
+  "parallaxReactiveBlock": 8399503,
   "parallaxReactiveBlockV3": 8388324,
+  "parallaxReactiveBlockV4": 8396898,
   "parallaxReactiveV1": "0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5",
   "parallaxReactiveV2": "0xC3C04592057E816EB706eF0E9A9438267537B2A2",
-  "parallaxReactiveV3": "0x52e292188E7f8dB587cB60fdd683100A8815eC89"
+  "parallaxReactiveV3": "0x52e292188E7f8dB587cB60fdd683100A8815eC89",
+  "parallaxReactiveV4": "0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042"
 }
