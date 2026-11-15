@@ -1,0 +1,9 @@
+{
+  "chainId": 1301,
+  "lpTokenId": 8024,
+  "mockUSDC": "0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c",
+  "mockWETH": "0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5",
+  "poolId": "0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c",
+  "startPrice": 3000,
+  "tripwireExecutor": "0x4d4f9688CA21f7acD88031BeDAA52579925BCbf9"
+}
