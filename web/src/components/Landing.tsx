@@ -202,8 +202,8 @@ function Dot({ x, delay, big, hollow }: { x: Pos; delay: number; big?: boolean; 
 function Label({ x, delay, top, sub, strong }: { x: Pos; delay: number; top: string; sub: string; strong?: boolean }) {
   return (
     <span className="lp-fade absolute left-[var(--x)] top-[calc(38%+30px)] -translate-x-1/2 whitespace-nowrap text-center lg:left-[var(--xl)] lg:top-[calc(50%+44px)]" style={{ ...px(x), "--delay": `${delay}ms` } as CSSProperties}>
-      <span className={cx("num block font-semibold tracking-[-0.02em]", strong ? "text-[24px] lg:text-[40px]" : "text-[16px] lg:text-[24px]")}>{top}</span>
-      <span className="block text-[13px] text-black/70 lg:text-[16px]">{sub}</span>
+      <span className={cx("num block font-semibold leading-[1.1] tracking-[-0.02em]", strong ? "text-[24px] lg:text-[40px]" : "text-[16px] lg:text-[24px]")}>{top}</span>
+      <span className="mt-1 block text-[13px] leading-[1.3] text-black/70 lg:text-[16px]">{sub}</span>
     </span>
   );
 }
@@ -324,7 +324,7 @@ function Showcase() {
       </div>
 
       {/* The real segmented control, built in em and enlarged to poster size; it works. */}
-      <div data-ui className="absolute bottom-[14svh] left-[5vw] text-[clamp(30px,8.4vw,44px)] md:bottom-[16vh] md:left-auto md:right-[-6vw] md:text-[clamp(44px,6.2vw,96px)]">
+      <div data-ui className="absolute bottom-[14svh] left-5 right-5 flex justify-center text-[clamp(22px,6.4vw,40px)] leading-none md:bottom-[16vh] md:left-auto md:right-10 md:block md:text-[clamp(36px,5vw,80px)]">
         <div role="radiogroup" aria-label="Protect against" className="relative inline-flex items-stretch rounded-full bg-black/90 p-[0.12em]">
           <span
             aria-hidden
@@ -338,7 +338,7 @@ function Showcase() {
               role="radio"
               aria-checked={mode === m}
               onClick={() => setMode(m)}
-              className={cx("relative z-10 w-[5.6em] whitespace-nowrap rounded-full px-[0.6em] py-[0.32em] font-semibold tracking-[-0.03em] transition-colors", mode === m ? "text-ink" : "text-muted hover:text-ink")}
+              className={cx("relative z-10 w-[5.6em] whitespace-nowrap rounded-full px-[0.6em] py-[0.32em] font-semibold leading-[1.1] tracking-[-0.03em] transition-colors", mode === m ? "text-ink" : "text-muted hover:text-ink")}
             >
               {m === "stop" ? "Stop-loss" : "Take-profit"}
             </button>
@@ -403,7 +403,7 @@ function Tile({ className, caption, line, children, i }: { className: string; ca
 
 function Features() {
   return (
-    <section aria-labelledby="feat-h" className="mx-auto max-w-[1360px] px-2.5 pb-24 md:pb-32">
+    <section aria-labelledby="feat-h" className="mx-auto max-w-[1360px] px-5 pb-24 md:px-10 md:pb-32">
       <div className="grid auto-rows-[28vw] grid-cols-2 gap-1.5 md:auto-rows-[104px] md:grid-cols-12 md:gap-2">
         <div data-reveal className="col-span-2 row-span-2 flex items-start rounded-[20px] bg-panel p-6 md:col-span-6 md:row-span-2">
           <h2 id="feat-h" className="text-[9vw] font-bold leading-none tracking-[-0.035em] md:text-[clamp(36px,4vw,60px)]">
@@ -411,7 +411,7 @@ function Features() {
           </h2>
         </div>
         <Tile i={1} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-2" caption="Trailing stop" line="Follows the price up">
-          <span className="inline-block rounded-full bg-active/15 px-[0.5em] py-[0.15em] text-[32px] font-semibold text-active md:text-[44px]">−2%</span>
+          <span className="inline-block rounded-full bg-active/15 px-[0.5em] py-[0.15em] text-[32px] font-semibold leading-[1.15] text-active md:text-[44px]">−2%</span>
         </Tile>
         <Tile i={2} className="row-span-2 bg-panel md:col-span-3 md:row-span-2" caption="Range guard" line="Re-centres your LP">
           <span className="relative mt-6 block h-[10px] w-[115%] rounded-full bg-raised">
@@ -428,19 +428,19 @@ function Features() {
           </span>
         </Tile>
         <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-4" caption="Re-checked on‑chain" line="Nothing executes on stale data">
-          <span className="mt-1 inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[24px] font-semibold text-executed md:text-[30px] lg:text-[44px]">Executed</span>
+          <span className="mt-1 inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[24px] font-semibold leading-[1.15] text-executed md:text-[30px] lg:text-[44px]">Executed</span>
         </Tile>
         <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-4" caption="About a second" line="Swap to execution on Base">
           <span className="num block text-[72px] font-bold leading-none tracking-[-0.05em] md:text-[110px]">1.6</span>
         </Tile>
         <Tile i={6} className="col-span-2 row-span-2 bg-panel md:col-span-6 md:row-span-2" caption="Vault" line="Steps out of a crash, back in when calm">
-          <span className="flex flex-wrap gap-3 text-[20px] font-semibold md:text-[30px]">
+          <span className="flex flex-wrap gap-3 text-[20px] font-semibold leading-[1.15] md:text-[30px]">
             <span className="whitespace-nowrap rounded-full bg-danger/15 px-[0.5em] py-[0.1em] text-danger">Evacuated</span>
             <span className="whitespace-nowrap rounded-full bg-executed/15 px-[0.5em] py-[0.1em] text-executed">Re‑entered</span>
           </span>
         </Tile>
         <Tile i={7} className="col-span-2 row-span-2 bg-[#202023] md:col-span-6 md:row-span-2" caption="Base and Unichain" line="One reactive contract guards both">
-          <span className="inline-flex rounded-full bg-raised p-[0.1em] text-[20px] font-semibold md:text-[30px]">
+          <span className="inline-flex rounded-full bg-raised p-[0.1em] text-[20px] font-semibold leading-[1.15] md:text-[30px]">
             <span className="rounded-full bg-[#4a4a4f] px-[0.6em] py-[0.1em]">Base</span>
             <span className="px-[0.6em] py-[0.1em] text-muted">Unichain</span>
           </span>
