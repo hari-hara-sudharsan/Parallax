@@ -16,6 +16,9 @@ contract ParallaxReactiveTest is Test {
     uint256 constant CHAIN = 1301;
     address constant POOL_MANAGER = 0x00B036B58a818B1BC34d502D3fE730Db729e62AC;
     address constant EXECUTOR = address(0xE0E0);
+    uint256 constant OTHER_CHAIN = 84532; // Base Sepolia
+    address constant OTHER_POOL_MANAGER = 0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408;
+    address constant OTHER_EXECUTOR = address(0xBA5E);
     bytes32 constant POOL = keccak256("pool");
     bytes32 constant OTHER_POOL = keccak256("other-pool");
 
@@ -26,8 +29,8 @@ contract ParallaxReactiveTest is Test {
         vm.etch(SYSTEM, address(new MockSystemContract()).code);
         sys = MockSystemContract(payable(SYSTEM));
         vm.warp(1_800_000_000);
-        reactive = new ParallaxReactive(CHAIN, POOL_MANAGER, CHAIN);
-        reactive.setExecutor(EXECUTOR);
+        reactive = new ParallaxReactive();
+        reactive.addChain(CHAIN, POOL_MANAGER, EXECUTOR);
     }
 
     // ── Log builders ────────────────────────────────────────────────────────
@@ -46,6 +49,7 @@ contract ParallaxReactiveTest is Test {
         r.data = data;
         r.opCode = opCode;
         r.txHash = uint256(keccak256(abi.encode(t0, t1, data)));
+        r.blockNumber = 1234;
     }
 
     /// @dev Matches the executor's RuleCreated layout: data = (ruleType, lowerTick, upperTick, zeroForOne, amountIn, positionId).
@@ -94,7 +98,7 @@ contract ParallaxReactiveTest is Test {
         assertEq(reactive.SWAP_TOPIC0(), 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f);
     }
 
-    function test_setExecutor_subscribesToAllRuleEvents() public view {
+    function test_addChain_subscribesToAllRuleEvents() public view {
         uint256[4] memory topics = [
             reactive.RULE_CREATED_TOPIC0(),
             reactive.RULE_CANCELLED_TOPIC0(),
@@ -108,14 +112,16 @@ contract ParallaxReactiveTest is Test {
         }
     }
 
-    function test_setExecutor_onlyOnce_onlyOwner() public {
-        vm.expectRevert(ParallaxReactive.ExecutorAlreadySet.selector);
-        reactive.setExecutor(address(1));
+    function test_addChain_oncePerChain_onlyOwner() public {
+        vm.expectRevert(abi.encodeWithSelector(ParallaxReactive.ChainAlreadyAdded.selector, CHAIN));
+        reactive.addChain(CHAIN, POOL_MANAGER, address(1));
 
-        ParallaxReactive fresh = new ParallaxReactive(CHAIN, POOL_MANAGER, CHAIN);
         vm.prank(address(0xBAD));
         vm.expectRevert(ParallaxReactive.NotOwner.selector);
-        fresh.setExecutor(address(1));
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+
+        vm.expectRevert(ParallaxReactive.ZeroAddress.selector);
+        reactive.addChain(OTHER_CHAIN, address(0), OTHER_EXECUTOR);
     }
 
     function test_react_onlySystem() public {
@@ -130,21 +136,21 @@ contract ParallaxReactiveTest is Test {
         assertFalse(_poolSubscribed(POOL));
         _react(_stop(1, POOL, -100));
 
-        (bytes32 poolId, int24 lower, int24 upper, bool exists, uint64 pending,) = reactive.mirror(1);
-        assertEq(poolId, POOL);
-        assertEq(lower, -100);
-        assertEq(upper, NO_UPPER);
-        assertTrue(exists);
-        assertEq(pending, 0);
+        ParallaxReactive.MirrorRule memory m = reactive.mirror(CHAIN, 1);
+        assertEq(m.poolId, POOL);
+        assertEq(m.lowerTick, -100);
+        assertEq(m.upperTick, NO_UPPER);
+        assertTrue(m.exists);
+        assertEq(m.pendingSince, 0);
         assertTrue(_poolSubscribed(POOL), "pool should be subscribed on first rule");
-        assertEq(reactive.rulesOf(POOL).length, 1);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 1);
     }
 
     function test_ruleCreated_duplicateDeliveryIgnored() public {
         _react(_stop(1, POOL, -100));
         uint256 subsBefore = sys.subCount();
         _react(_stop(1, POOL, -100));
-        assertEq(reactive.rulesOf(POOL).length, 1);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 1);
         assertEq(sys.subCount(), subsBefore);
     }
 
@@ -153,7 +159,7 @@ contract ParallaxReactiveTest is Test {
         uint256 subsBefore = sys.subCount();
         _react(_stop(2, POOL, -200));
         assertEq(sys.subCount(), subsBefore);
-        assertEq(reactive.rulesOf(POOL).length, 2);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 2);
     }
 
     function test_cancel_removesRule_andUnwatchesEmptyPool() public {
@@ -161,15 +167,14 @@ contract ParallaxReactiveTest is Test {
         _react(_stop(2, POOL, -200));
 
         _react(_executorEvent(reactive.RULE_CANCELLED_TOPIC0(), 1));
-        uint256[] memory left = reactive.rulesOf(POOL);
+        uint256[] memory left = reactive.rulesOf(CHAIN, POOL);
         assertEq(left.length, 1);
         assertEq(left[0], 2);
-        (,,,,, uint32 idx) = reactive.mirror(2);
-        assertEq(idx, 0, "moved rule index updated");
+        assertEq(reactive.mirror(CHAIN, 2).index, 0, "moved rule index updated");
         assertTrue(_poolSubscribed(POOL));
 
         _react(_executorEvent(reactive.RULE_CANCELLED_TOPIC0(), 2));
-        assertEq(reactive.rulesOf(POOL).length, 0);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 0);
         assertFalse(_poolSubscribed(POOL), "pool unsubscribed when empty");
     }
 
@@ -193,9 +198,10 @@ contract ParallaxReactiveTest is Test {
         assertEq(cb.gasLimit, reactive.CALLBACK_GAS_LIMIT());
         // First arg MUST be the address(0) placeholder that Reactive Network overwrites.
         assertEq(
-            cb.payload, abi.encodeCall(IParallaxExecutor.execute, (address(0), uint256(1), int24(-150), s.txHash))
+            cb.payload,
+            abi.encodeCall(IParallaxExecutor.execute, (address(0), uint256(1), int24(-150), s.txHash, s.blockNumber))
         );
-        (,,,, uint64 pending,) = reactive.mirror(1);
+        uint64 pending = reactive.mirror(CHAIN, 1).pendingSince;
         assertEq(pending, block.timestamp);
     }
 
@@ -224,7 +230,7 @@ contract ParallaxReactiveTest is Test {
         _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -150));
         _react(_executorEvent(reactive.RULE_SKIPPED_TOPIC0(), 1));
-        (,,,, uint64 pending,) = reactive.mirror(1);
+        uint64 pending = reactive.mirror(CHAIN, 1).pendingSince;
         assertEq(pending, 0);
         _react(_swap(POOL, -150));
         assertEq(sys.callbackCount(), 2);
@@ -245,7 +251,7 @@ contract ParallaxReactiveTest is Test {
         _react(_stop(1, POOL, -100));
         _react(_swap(POOL, -150));
         _react(_executorEvent(reactive.RULE_EXECUTED_TOPIC0(), 1));
-        assertEq(reactive.rulesOf(POOL).length, 0);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 0);
         vm.warp(block.timestamp + 1 days);
         _react(_swap(POOL, -150));
         assertEq(sys.callbackCount(), 1);
@@ -297,6 +303,77 @@ contract ParallaxReactiveTest is Test {
         _react(_ruleCreated(2, POOL, -100, 100));
         _react(_swap(POOL, 150)); // rule 1 and 2 both fire on the upside
         assertEq(sys.callbackCount(), 2);
+    }
+
+    // ── Multi-chain: one reactive contract guarding rules on two chains ──
+
+    function _onOther(IReactive.LogRecord memory r) internal pure returns (IReactive.LogRecord memory) {
+        r.chainId = OTHER_CHAIN;
+        if (r.contractAddress == EXECUTOR) r.contractAddress = OTHER_EXECUTOR;
+        if (r.contractAddress == POOL_MANAGER) r.contractAddress = OTHER_POOL_MANAGER;
+        return r;
+    }
+
+    function test_multichain_sameRuleIdOnTwoChains_isIndependent() public {
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+        _react(_stop(1, POOL, -100)); //            rule 1 on Unichain
+        _react(_onOther(_stop(1, POOL, -500))); //  rule 1 on Base (same id and poolId, different chain)
+
+        assertEq(reactive.mirror(CHAIN, 1).lowerTick, -100);
+        assertEq(reactive.mirror(OTHER_CHAIN, 1).lowerTick, -500);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 1);
+        assertEq(reactive.rulesOf(OTHER_CHAIN, POOL).length, 1);
+        assertEq(reactive.chainCount(), 2);
+    }
+
+    function test_multichain_callbackGoesBackToTheChainThatTripped() public {
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+        _react(_stop(1, POOL, -100));
+        _react(_onOther(_stop(1, POOL, -100)));
+
+        _react(_onOther(_swap(POOL, -150))); // only Base's pool moved
+        assertEq(sys.callbackCount(), 1);
+        MockSystemContract.CallbackReq memory cb = sys.callbackAt(0);
+        assertEq(cb.chainId, OTHER_CHAIN);
+        assertEq(cb.recipient, OTHER_EXECUTOR);
+        assertEq(reactive.mirror(CHAIN, 1).pendingSince, 0, "Unichain rule untouched");
+        assertGt(reactive.mirror(OTHER_CHAIN, 1).pendingSince, 0);
+    }
+
+    function test_multichain_eachChainWatchesItsOwnPoolManager() public {
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+        _react(_onOther(_stop(1, POOL, -100)));
+        assertTrue(
+            sys.subscribed(
+                address(reactive), OTHER_CHAIN, OTHER_POOL_MANAGER, reactive.SWAP_TOPIC0(), uint256(POOL), REACTIVE_IGNORE, REACTIVE_IGNORE
+            )
+        );
+        assertFalse(_poolSubscribed(POOL), "Unichain pool not subscribed by a Base rule");
+    }
+
+    function test_multichain_unknownChainIgnored() public {
+        IReactive.LogRecord memory r = _stop(1, POOL, -100);
+        r.chainId = 999;
+        _react(r);
+        assertFalse(reactive.mirror(999, 1).exists);
+    }
+
+    function test_callbackCarriesOriginBlock() public {
+        _react(_stop(1, POOL, -100));
+        IReactive.LogRecord memory s = _swap(POOL, -150);
+        s.blockNumber = 987_654;
+        _react(s);
+        (, uint256 ruleId,, uint256 originTx, uint256 originBlock) =
+            abi.decode(_args(sys.callbackAt(0).payload), (address, uint256, int24, uint256, uint256));
+        assertEq(ruleId, 1);
+        assertEq(originTx, s.txHash);
+        assertEq(originBlock, 987_654);
+    }
+
+    /// @dev Strip the 4-byte selector from a calldata payload.
+    function _args(bytes memory payload) internal pure returns (bytes memory out) {
+        out = new bytes(payload.length - 4);
+        for (uint256 i; i < out.length; ++i) out[i] = payload[i + 4];
     }
 
     // ── Robustness: never revert on unexpected input (reverts are billed) ──

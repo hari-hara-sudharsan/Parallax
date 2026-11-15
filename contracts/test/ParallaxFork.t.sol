@@ -88,9 +88,9 @@ contract ParallaxForkTest is Test {
         // Mock Omni system contract, then the real deployment order: Reactive → Executor → setExecutor.
         vm.etch(SYSTEM, address(new MockSystemContract()).code);
         sys = MockSystemContract(payable(SYSTEM));
-        reactive = new ParallaxReactive(CHAIN, address(PM), CHAIN);
+        reactive = new ParallaxReactive();
         executor = new ParallaxExecutor(IPayable(payable(CALLBACK_PROXY)), address(reactive), PM, POSM);
-        reactive.setExecutor(address(executor));
+        reactive.addChain(CHAIN, address(PM), address(executor));
 
         weth.mint(alice, 100 ether);
         vm.prank(alice);
@@ -179,10 +179,10 @@ contract ParallaxForkTest is Test {
     function _callbackFromProxy(uint256 ruleId) internal {
         int24 observed = _tick(); // read BEFORE prank: an external call would consume the prank
         vm.prank(CALLBACK_PROXY);
-        executor.execute(address(reactive), ruleId, observed, uint256(keccak256("origin")));
+        executor.execute(address(reactive), ruleId, observed, uint256(keccak256("origin")), block.number - 2);
     }
 
-    function _toRecord(Vm.Log memory l, uint256 txHash) internal pure returns (IReactive.LogRecord memory r) {
+    function _toRecord(Vm.Log memory l, uint256 txHash) internal view returns (IReactive.LogRecord memory r) {
         r.chainId = CHAIN;
         r.contractAddress = l.emitter;
         r.opCode = l.topics.length;
@@ -192,6 +192,7 @@ contract ParallaxForkTest is Test {
         if (l.topics.length > 3) r.topic3 = uint256(l.topics[3]);
         r.data = l.data;
         r.txHash = txHash;
+        r.blockNumber = block.number;
     }
 
     /// @dev Delivers every recorded log the reactive contract is subscribed to (what Reactive Network does).
@@ -277,7 +278,7 @@ contract ParallaxForkTest is Test {
         _crash(30 ether);
         // Even passing the right reactive address, a non-proxy caller is rejected.
         vm.expectRevert(abi.encodeWithSelector(AbstractPayer.NotAuthorized.selector, address(this), CALLBACK_PROXY));
-        executor.execute(address(reactive), id, 0, 0);
+        executor.execute(address(reactive), id, 0, 0, 0);
     }
 
     function test_execute_rejectsOtherReactiveContract() public {
@@ -288,7 +289,7 @@ contract ParallaxForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(AbstractCallback.CallbackNotAuthorized.selector, impostor, address(reactive))
         );
-        executor.execute(impostor, id, 0, 0);
+        executor.execute(impostor, id, 0, 0, 0);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -387,7 +388,7 @@ contract ParallaxForkTest is Test {
         vm.recordLogs();
         uint256 id = _createStopLoss(1 ether, 100);
         _deliverRecorded(uint256(keccak256("tx:createRule")));
-        assertEq(reactive.rulesOf(poolId).length, 1);
+        assertEq(reactive.rulesOf(CHAIN, poolId).length, 1);
 
         // 2. A market swap that does NOT cross the stop → no callback.
         vm.recordLogs();
@@ -422,7 +423,7 @@ contract ParallaxForkTest is Test {
 
         // 5. RuleExecuted flows back: rule removed from the mirror and the pool unsubscribed.
         _deliverRecorded(uint256(keccak256("tx:callback")));
-        assertEq(reactive.rulesOf(poolId).length, 0);
+        assertEq(reactive.rulesOf(CHAIN, poolId).length, 0);
 
         // 6. RuleExecuted carries the origin tx hash, the link the frontend uses for latency.
         //    (checked via the mirror being cleared + event emitted in step 4)
@@ -445,7 +446,7 @@ contract ParallaxForkTest is Test {
         _callbackFromProxy(id); // → RuleSkipped(CONDITION_NOT_MET)
         _deliverRecorded(3); //  → reactive re-arms
 
-        (,,,, uint64 pending,) = reactive.mirror(id);
+        uint64 pending = reactive.mirror(CHAIN, id).pendingSince;
         assertEq(pending, 0, "re-armed");
 
         // Next crash fires it again and this time it executes.
@@ -565,7 +566,7 @@ contract ParallaxForkTest is Test {
         vm.recordLogs();
         (uint256 id, uint256 positionId,,) = _createRangeGuard();
         _deliverRecorded(uint256(keccak256("tx:createRangeGuard")));
-        assertEq(reactive.rulesOf(poolId).length, 1);
+        assertEq(reactive.rulesOf(CHAIN, poolId).length, 1);
 
         // In-range churn: no callback.
         vm.recordLogs();
@@ -593,7 +594,7 @@ contract ParallaxForkTest is Test {
         assertEq(IERC721(address(POSM)).ownerOf(positionId), alice);
 
         _deliverRecorded(uint256(keccak256("tx:callback")));
-        assertEq(reactive.rulesOf(poolId).length, 0, "mirror cleared, pool unwatched");
+        assertEq(reactive.rulesOf(CHAIN, poolId).length, 0, "mirror cleared, pool unwatched");
         id;
     }
 }
