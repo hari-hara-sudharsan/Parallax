@@ -32,7 +32,10 @@ interface IParallaxExecutor {
     /// @param amount0Out currency0 sent to the owner (swap proceeds or refund, or withdrawn liquidity).
     /// @param amount1Out currency1 sent to the owner.
     /// @param originTxHash Hash of the origin Swap tx that tripped the rule (the latency proof link).
+    /// @param originBlock Block of that origin Swap on the origin chain (from Reactive's LogRecord).
     /// @param executedAt block.timestamp of execution (T1 in the latency measurement).
+    /// @dev When origin and destination are the same chain, `block.number - originBlock` of the tx that
+    ///      emitted this event is the exact latency in blocks.
     event RuleExecuted(
         uint256 indexed ruleId,
         address indexed owner,
@@ -40,6 +43,7 @@ interface IParallaxExecutor {
         uint256 amount0Out,
         uint256 amount1Out,
         uint256 originTxHash,
+        uint256 originBlock,
         uint256 executedAt
     );
 
@@ -51,5 +55,12 @@ interface IParallaxExecutor {
     /// @param ruleId Rule to execute.
     /// @param observedTick Tick the reactive contract saw in the origin Swap (informational only).
     /// @param originTxHash Origin Swap tx hash (as uint256, straight from LogRecord.txHash).
-    function execute(address reactiveSender, uint256 ruleId, int24 observedTick, uint256 originTxHash) external;
+    /// @param originBlock Origin Swap block number (LogRecord.blockNumber), recorded for block-exact latency.
+    function execute(
+        address reactiveSender,
+        uint256 ruleId,
+        int24 observedTick,
+        uint256 originTxHash,
+        uint256 originBlock
+    ) external;
 }

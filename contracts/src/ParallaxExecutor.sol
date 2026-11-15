@@ -26,7 +26,7 @@ import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 import {IParallaxExecutor} from "./interfaces/IParallaxExecutor.sol";
-import {Rule, RuleType, RuleStatus, SkipReason, NO_LOWER, NO_UPPER} from "./libraries/RuleTypes.sol";
+import {Rule, RuleType, RuleStatus, SkipReason, Origin, Execution, NO_LOWER, NO_UPPER} from "./libraries/RuleTypes.sol";
 
 /// @title ParallaxExecutor
 /// @notice Destination-chain half of Parallax. Users register protection rules here:
@@ -77,6 +77,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
 
     uint256 public nextRuleId = 1;
     mapping(uint256 ruleId => Rule) public rules;
+    /// @notice Proof of each execution, readable without an indexer.
+    mapping(uint256 ruleId => Execution) public executions;
     mapping(bytes32 poolId => PoolKey) internal _poolKeys;
     mapping(bytes32 poolId => uint256) public activeRuleCount;
 
@@ -206,13 +208,14 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     ///      Callback Proxy) AND `onlyCallbackSender` (the injected first argument is our reactive contract).
     ///      Benign failures do NOT revert; they emit RuleSkipped so the reactive contract can re-arm the
     ///      rule (a reverted callback is still billed and is invisible to the reactive side).
-    function execute(address reactiveSender, uint256 ruleId, int24, /* observedTick: informational, we re-read */ uint256 originTxHash)
-        external
-        override
-        onlyServiceProvider
-        onlyCallbackSender(reactiveSender)
-        nonReentrant
-    {
+    function execute(
+        address reactiveSender,
+        uint256 ruleId,
+        int24, /* observedTick: informational, we always re-read the tick ourselves */
+        uint256 originTxHash,
+        uint256 originBlock
+    ) external override onlyServiceProvider onlyCallbackSender(reactiveSender) nonReentrant {
+        Origin memory origin = Origin(originTxHash, originBlock);
         Rule storage r = rules[ruleId];
         PoolKey memory key = _poolKeys[r.poolId];
         (uint160 sqrtPriceX96, int24 tick,,) = POOL_MANAGER.getSlot0(key.toId());
@@ -233,8 +236,8 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         activeRuleCount[r.poolId]--;
 
         bool ok = r.ruleType == RuleType.RANGE_GUARD
-            ? _withdrawAndReport(ruleId, r, key, tick, originTxHash)
-            : _swapAndReport(ruleId, r, key, sqrtPriceX96, originTxHash);
+            ? _withdrawAndReport(ruleId, r, key, tick, origin)
+            : _swapAndReport(ruleId, r, key, sqrtPriceX96, origin);
 
         if (!ok) {
             r.status = RuleStatus.ACTIVE;
@@ -324,7 +327,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
 
     /// @dev Swap rule: sells the deposit via unlock(). Returns false (instead of reverting) if the swap
     ///      fails, e.g. the slippage floor was not met.
-    function _swapAndReport(uint256 ruleId, Rule storage r, PoolKey memory key, uint160 sqrtPriceX96, uint256 originTxHash)
+    function _swapAndReport(uint256 ruleId, Rule storage r, PoolKey memory key, uint160 sqrtPriceX96, Origin memory origin)
         internal
         returns (bool)
     {
@@ -337,7 +340,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         ) {
             (uint256 refund, uint256 amountOut) = abi.decode(result, (uint256, uint256));
             (uint256 out0, uint256 out1) = r.zeroForOne ? (refund, amountOut) : (amountOut, refund);
-            emit RuleExecuted(ruleId, r.owner, _tick(key), out0, out1, originTxHash, block.timestamp);
+            _recordExecution(ruleId, r.owner, key, out0, out1, origin);
             return true;
         } catch {
             return false;
@@ -347,7 +350,7 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
     /// @dev Range guard: withdraw all liquidity + fees to the owner through the PositionManager, then hand
     ///      the (now empty) NFT back. Out of range the position holds a single token, so the expected
     ///      amount is exact and the slippage floor is tight.
-    function _withdrawAndReport(uint256 ruleId, Rule storage r, PoolKey memory key, int24 tick, uint256 originTxHash)
+    function _withdrawAndReport(uint256 ruleId, Rule storage r, PoolKey memory key, int24 tick, Origin memory origin)
         internal
         returns (bool)
     {
@@ -356,11 +359,31 @@ contract ParallaxExecutor is AbstractCallback, IUnlockCallback, IParallaxExecuto
         try POSITION_MANAGER.modifyLiquidities(_withdrawCalldata(r, key, tick), block.timestamp) {
             _nft().transferFrom(address(this), owner_, r.positionId); // hand back the now-empty NFT
             (uint256 now0, uint256 now1) = _balances(key, owner_);
-            emit RuleExecuted(ruleId, owner_, _tick(key), now0 - bal0, now1 - bal1, originTxHash, block.timestamp);
+            _recordExecution(ruleId, owner_, key, now0 - bal0, now1 - bal1, origin);
             return true;
         } catch {
             return false;
         }
+    }
+
+    /// @dev Stores the proof of execution and emits RuleExecuted (T1 = block.timestamp).
+    function _recordExecution(
+        uint256 ruleId,
+        address owner_,
+        PoolKey memory key,
+        uint256 amount0Out,
+        uint256 amount1Out,
+        Origin memory origin
+    ) internal {
+        executions[ruleId] = Execution({
+            originTxHash: origin.txHash,
+            originBlock: uint64(origin.blockNumber),
+            executedBlock: uint64(block.number),
+            executedAt: uint64(block.timestamp)
+        });
+        emit RuleExecuted(
+            ruleId, owner_, _tick(key), amount0Out, amount1Out, origin.txHash, origin.blockNumber, block.timestamp
+        );
     }
 
     /// @dev PositionManager action list: DECREASE_LIQUIDITY (all of it, with slippage minimums), then

@@ -52,3 +52,18 @@ struct Rule {
     bytes32 poolId;
     uint256 positionId; //       range guard: v4 PositionManager NFT id held by the executor
 }
+
+/// @notice Where a callback came from: the origin Swap that tripped the rule.
+struct Origin {
+    uint256 txHash;
+    uint256 blockNumber;
+}
+
+/// @notice On-chain record of an execution, so anyone (including the dashboard) can prove the loop
+///         from contract storage alone, with no indexer: origin tx + block → executed block + time.
+struct Execution {
+    uint256 originTxHash;
+    uint64 originBlock;
+    uint64 executedBlock;
+    uint64 executedAt;
+}
