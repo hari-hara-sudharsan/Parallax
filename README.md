@@ -1,65 +1,94 @@
 # Parallax
 
-**Keeperless, ~1-second protection for Uniswap v4 traders and LPs.** Set a stop-loss, take-profit, trailing stop or LP
-range guard once; a reactive contract on Reactive Omni watches every swap and, the moment the price crosses your line,
-calls back and executes, with no bot and no server. One reactive contract guards **Base Sepolia and Unichain Sepolia**.
+### A guard that watches your Uniswap v4 position from a parallel chain, and acts within about 1.4 seconds.
 
-> Reactive Omni Buildathon · Track 1 *Every Second Counts* · built Nov 2026
+Set a stop-loss, take-profit, trailing stop or LP range guard once. A reactive contract on **Reactive Omni** watches
+every swap on **Base Sepolia and Unichain Sepolia**. When the price crosses your line it calls back and executes on the
+official Uniswap v4 contracts. No bot, no server and no hot key are involved, and nothing you run has to stay online.
+
+> Reactive Omni Buildathon · Track 1 **Every Second Counts** · built Nov 2026 · MIT
+
+<!-- VIDEO: add the demo video link here, e.g. | **Demo video (2:50)** | https://youtu.be/... | -->
 
 | | |
 |---|---|
-| **Live result** | **44 / 44** live rounds filled · **Base median 7 blocks ≈ 1.4 s** origin swap → execution (p90 2.0 s, fastest 1.0 s) |
-| **vs a keeper bot** | Same pool, same crossing swap: a 250 ms-polling bot fills at a median of **10 blocks ≈ 2.0 s** |
-| **Real DeFi, not a mock** | Official Uniswap v4 `PoolManager` / `PositionManager` on both chains |
-| **Live dashboard** | **[hari-hara-sudharsan.github.io/Parallax](https://hari-hara-sudharsan.github.io/Parallax/)** (static site; connect MetaMask on Base Sepolia) |
-| **Proof** | Every origin, reactive and callback tx: [`results/SUMMARY.md`](results/SUMMARY.md) · addresses: [`deployments/addresses.md`](deployments/addresses.md) |
+| ⚡ **Speed** | **Median 7 Base blocks ≈ 1.4 s** from the price-crossing swap to the executed sell (p90 2.0 s, fastest 1.0 s) |
+| ✅ **Reliability** | **44 / 44** benchmark rounds filled on two chains, and every tx hash is published |
+| 🤖 **vs a keeper bot** | Same pool, same crossing swap: a 250 ms-polling bot with a warm RPC needs **10 blocks ≈ 2.0 s**. Parallax is **~30% faster** and needs no infrastructure |
+| 🦄 **Real DeFi** | The official Uniswap v4 `PoolManager` and `PositionManager` on **both** chains, not a mock pool |
+| 🧠 **Real reactive work** | The reactive contract holds the order book, decides what crossed, raises trailing stops and re-arms stale triggers |
+| 🧪 **Tested** | **93 Foundry tests**, including fork tests against live Uniswap v4 |
+| 🖥️ **Dashboard** | [hari-hara-sudharsan.github.io/Parallax](https://hari-hara-sudharsan.github.io/Parallax/) (connect MetaMask on Base Sepolia) |
+
+---
+
+## Verify it in 60 seconds
+
+You don't have to trust this README. Pick any row of [`results/SUMMARY.md`](results/SUMMARY.md) and click its three links:
+
+1. **Origin swap** on Basescan: the price crosses a user's line.
+2. **Reactive tx** on Reactscan (Lasna): `react()` emits `RuleTriggered` and requests the callback. No one sent this transaction.
+3. **Callback** on Basescan: `ParallaxExecutor` re-checks the live price, sells, and writes
+   `executedBlock − originBlock` into its own storage.
+
+The latency figures come from that on-chain record, not from our stopwatch.
 
 ---
 
 ## 1. The problem
 
-- **DEXs have no native stop-loss.** AMMs have no order book, so stop-loss and take-profit orders depend on third-party
-  keeper bots that someone has to host, fund and trust.
-- **Keeper bots fail exactly when it matters.** They go offline, run out of gas, skip unprofitable orders or simply
-  arrive late, and a late stop in a fast market fills far below its trigger.
-- **Concentrated liquidity drifts out of range.** When the price leaves an LP's range the position stops earning fees.
-  Industry analyses of Uniswap-style pools put roughly 30% of concentrated liquidity out of range at a given time, and
-  individual wallets fare worst. *(Figures from the project brief; the source link is to be added before submission.)*
-- **Depegs punish slow exits.** In the March 2023 USDC depeg, stable pools drained within hours and late exits got far
-  worse prices.
+- **DEXs have no native stop-loss.** An AMM has no order book. A stop-loss on Uniswap is a transaction that *someone*
+  has to send at the right moment.
+- **That "someone" is a keeper bot,** which a person has to host, fund, secure and keep online. Bots go down, run out
+  of gas, skip orders that don't pay them, or arrive late. A late stop in a falling market fills far below its trigger.
+- **Concentrated liquidity drifts out of range.** When the price leaves an LP's range, the position stops earning fees
+  and becomes a one-sided bag. Individual wallets, which have no managers or bots, are the worst affected.
+- **Depegs and crashes punish slow exits.** In the March 2023 USDC depeg, stable pools drained within hours and every
+  late exit got a worse price.
 
-All four are races against time.
+All four are **races against time**, and today the only way to win them is to run your own bot.
 
-## 2. Why it needs Omni
+## 2. Why this needs Reactive Omni
 
-Reactive's legacy network had ~7 s blocks plus reorg risk: a reactive guard simply arrived too late. **Omni runs on
-CometBFT with ~1 s blocks and instant finality**, so a swap on Base can be seen, decided on and answered with a callback
-in a couple of seconds. Parallax measures this on-chain, round after round.
+On legacy Reactive, a **single block took ~7 s**. That is longer than Parallax's *entire* loop on Omni, and reorg risk
+came on top of it. A reactive stop-loss was too slow to beat a bot.
+
+**Omni runs on CometBFT with ~1 s blocks and instant finality.** In one second, a swap on Base is seen, decided on and
+answered with a callback:
+
+```
+Swap on Base ──▶ react() on Lasna ──▶ callback executes on Base
+   T0                ~1 s                 T0 + 1.4 s (median, measured over 32 rounds)
+```
+
+With this speed, keeperless protection beats a well-run bot instead of trailing it. And there is nothing for the user
+to keep online: no machine, no RPC subscription and no hot key holding funds.
 
 ## 3. What it does
 
 | Rule | Fires when | Action |
 |---|---|---|
-| **Stop-loss** | price falls to your level | sell your deposit |
-| **Take-profit** | price rises to your target | sell your deposit |
-| **Bracket** | either of the above, whichever comes first | sell your deposit |
-| **Trailing stop** | price falls X% below its best level since you armed it | sell your deposit; the stop only ever tightens |
-| **Range guard** | your v4 LP position leaves its range | withdraw liquidity + fees to you, **or re-centre it**: re-open a same-width position around the new price and keep guarding it |
+| **Stop-loss** | the price falls to your level | sells your deposit |
+| **Take-profit** | the price rises to your target | sells your deposit |
+| **Bracket** | either of the above, whichever comes first | sells your deposit |
+| **Trailing stop** | the price falls X% below its best level since you armed it | sells; the stop **only ever tightens** as the price rises |
+| **Range guard** | your v4 LP position leaves its range | withdraws liquidity + fees to you, **or re-centres**: re-opens a same-width position around the new price and keeps guarding it |
 
-Every rule fires on `tick <= lowerTick || tick >= upperTick`; one representation covers all of them.
+Every rule reduces to one test, `tick <= lowerTick || tick >= upperTick`, so one engine covers all five.
 
-**Parallax Vault (keeperless managed LP).** Deposit both pool tokens once and get `pxLP` shares. A second reactive
-contract (the vault's "brain" on Lasna) watches every swap and keeps a short price history by timestamp:
+### Parallax Vault: a keeperless managed LP
+
+Deposit both pool tokens once and receive `pxLP` shares. A second reactive contract (the vault's "brain" on Lasna)
+watches every swap and keeps a short price history, tracked by timestamp:
 
 | Situation | What the vault does |
 |---|---|
-| price drifts out of the range | **re-centres**: re-opens the same width around the price |
-| price moves ≥ 2% within 60 s (a crash in progress) | **evacuates**: pulls all liquidity out so it is not sold into the move |
-| evacuated, and the market has been calm for 60 s | **re-enters** around the new price |
+| The price drifts out of range | **re-centres** around the new price |
+| The price moves ≥ 2% within 60 s (a crash in progress) | **evacuates** all liquidity, so it isn't sold into the move |
+| Evacuated, and the market has been calm for 60 s | **re-enters** around the new price |
 
-Each callback re-checks its condition against the live pool on Base before moving money. Honest trade-off: stepping
-out of a crash avoids being sold into it, but if the price snaps straight back the vault re-enters lower and can end
-slightly behind a passive LP. The gain is time in range (earning fees) and a circuit breaker, not guaranteed profit.
+Honest trade-off: stepping out of a crash avoids being sold into it, but if the price snaps straight back, the vault
+re-enters lower. What you gain is time in range and a circuit breaker, not guaranteed profit.
 
 ## 4. How it works
 
@@ -76,36 +105,33 @@ slightly behind a passive LP. The gain is time in range (earning fees) and a cir
                                            └──────────────────────────────┘         └────────────────────────────────┘
 ```
 
-1. **Arm**: you deposit tokens (or an LP NFT) into `ParallaxExecutor`; it emits `RuleCreated`.
-2. **Mirror**: `ParallaxReactive` receives the event, stores the rule and, if it's the pool's first rule, subscribes
-   to that pool's v4 `Swap` events from inside `react()`. When the pool's last rule is gone it unsubscribes, so idle
-   pools cost nothing.
-3. **Decide**: every `Swap` reaches `react()` about a second later; the contract compares the new tick with the pool's
-   rules (bounded: ≤25 rules, ≤3 callbacks per swap, well under the 900k reactive gas cap).
-4. **Act**: `SYSTEM.requestCallbackV_1_0` sends the callback to the executor **on the chain that tripped**. The
-   executor re-checks the price itself, acts, and writes `executedBlock − originBlock` into storage.
+1. **Arm.** You deposit tokens (or an LP NFT) into `ParallaxExecutor`, which emits `RuleCreated`.
+2. **Mirror.** `ParallaxReactive` stores the rule. If it is the pool's first rule, the contract **subscribes to that
+   pool's v4 `Swap` events from inside `react()`**. When the pool's last rule is gone it unsubscribes, so idle pools
+   cost nothing.
+3. **Decide.** Every `Swap` reaches `react()` about a second later. The contract compares the new tick with the pool's
+   rules, with fixed limits: at most 25 rules per pool and 3 callbacks per swap, well under the 900k reactive gas cap.
+4. **Act.** `SYSTEM.requestCallbackV_1_0` sends the callback to the executor **on the chain that tripped**. The
+   executor re-checks the price itself, acts, and records the latency on-chain.
 
-The reactive contract does real work: it holds the order book, decides which rules crossed, schedules trailing-stop
-raises, rate-limits itself, and re-arms rules when the executor reports a stale trigger.
+### The reactive contract does the real work
+
+Take Reactive away and you need a bot again, because these jobs all run on Lasna:
+
+- **It holds the order book.** It mirrors every rule on both chains from the executors' events. Nothing off-chain
+  tells it which rule to fire.
+- **It decides.** On each swap it determines which rules crossed, and it fires each rule once by marking it pending.
+  That matters during a burst of swaps on Base's 200 ms blocks.
+- **It manages subscriptions.** It subscribes to a pool when the pool's first rule arrives and unsubscribes when the
+  last one goes.
+- **It runs trailing stops.** It watches for new highs and requests stop raises, which the executor checks against the
+  live tick.
+- **It recovers.** When the executor reports a stale trigger (`RuleSkipped`), it re-arms the rule.
+- **One contract serves both chains.** A single reactive contract guards Base Sepolia and Unichain Sepolia.
 
 Details: [`docs/architecture.md`](docs/architecture.md).
 
-## 5. Deployed contracts (testnet)
-
-| Contract | Chain | Address |
-|---|---|---|
-| ParallaxReactive v4.1 (guards both chains) | Reactive Lasna (5318007) | [`0xDf554201dec784F0541FA5fc884240c73113e334`](https://lasna.reactscan.net/address/0xDf554201dec784F0541FA5fc884240c73113e334) |
-| ParallaxExecutor v4.1 | Base Sepolia (84532) | [`0x2f772766ec926359093FA2d478FBDdcd828304Ff`](https://sepolia.basescan.org/address/0x2f772766ec926359093FA2d478FBDdcd828304Ff) |
-| ParallaxExecutor v4.1 | Unichain Sepolia (1301) | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
-| v4 (first live trailing + re-centre run) | Lasna / Base / Unichain | `0x7b8f…e042` / `0x058a…254e` / `0xD83D…Ec9F` |
-| ParallaxReactive / Executors v3 (the 44-round benchmark) | Lasna / Base / Unichain | `0x52e2…eC89` / `0x4d4f…Cbf9` / `0x8633…1181` |
-| ParallaxVaultReactive v2 (vault brain) | Reactive Lasna (5318007) | [`0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24`](https://lasna.reactscan.net/address/0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24) |
-| ParallaxVault v2 (`pxLP`) | Base Sepolia (84532) | [`0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F`](https://sepolia.basescan.org/address/0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F) |
-| Demo pool mUSDC / mWETH 0.3% (real Uniswap v4) | both | poolId `0xade8c1a3…6f89763c` |
-
-Earlier versions, deploy transactions and every third-party address with its source: [`deployments/addresses.md`](deployments/addresses.md).
-
-## 6. Proof: the full loop, measured
+## 5. Proof: the full loop, measured
 
 `bench/bench.mjs` runs real rounds end to end: create a rule 0.5% from spot → wait for Lasna to mirror it → make the
 crossing swap → wait for the callback → read the executor's on-chain `Execution` record → find the reactive tx.
@@ -113,85 +139,117 @@ crossing swap → wait for the callback → read the executor's on-chain `Execut
 | Chain | Block time | Rounds | Filled | Median | p90 | Fastest |
 |---|---|---|---|---|---|---|
 | **Base Sepolia** | 200 ms | 32 | **32/32** | **7 blocks ≈ 1.4 s** | 10 blocks ≈ 2.0 s | 5 blocks ≈ 1.0 s |
-| Unichain Sepolia | 1 s | 12 | **12/12** | 2 blocks ≈ 2.0 s | 3 blocks ≈ 3.0 s | 2 blocks |
-| *Keeper bot, Base (`bench/keeper.mjs`)* | 200 ms | 20 | 20/20 | *10 blocks ≈ 2.0 s* | *11 blocks* | *8 blocks* |
+| **Unichain Sepolia** | 1 s | 12 | **12/12** | 2 blocks ≈ 2.0 s | 3 blocks ≈ 3.0 s | 2 blocks |
 
-Block counts are exact (read from contract storage). Wall-clock numbers in the full table are upper bounds (public-RPC
-polling). Every round, with explorer links: **[`results/SUMMARY.md`](results/SUMMARY.md)**. A first Unichain run broken by a
-benchmark-script bug is kept, with the explanation, in [`results/invalid/`](results/invalid/README.md).
+Block counts are exact, because they are read from contract storage. Wall-clock figures in the full table are upper
+bounds, since they come from polling public RPCs. Every round, with explorer links:
+**[`results/SUMMARY.md`](results/SUMMARY.md)**. A first Unichain run broken by a benchmark-script bug is kept, with the
+explanation, in [`results/invalid/`](results/invalid/README.md). We don't hide failures.
 
-One complete loop on Base Sepolia (a median round):
+### Head to head: Parallax vs a keeper bot
+
+`bench/keeper.mjs` is a *good* bot: it polls every 250 ms over a warm RPC connection and holds a funded hot key. It ran
+the same stop on the same pool, triggered by the same crossing swap:
+
+| Base Sepolia | Rounds | Filled | Blocks p50 / p90 / min | Seconds p50 |
+|---|---|---|---|---|
+| **Parallax (on-chain, no bot)** | 32 | 32/32 | **7 / 10 / 5** | **1.4 s** |
+| Keeper bot (off-chain) | 20 | 20/20 | 10 / 11 / 8 | 2.0 s |
+
+Parallax was faster **and** removed the server, the hot key and the uptime risk. The benchmark doesn't model the bot's
+real-world failures (downtime, gas spikes, skipped orders), so the real gap is larger.
+
+### One complete loop (a median round, Base Sepolia)
 
 | ① Origin swap | ② Reactive tx (Lasna) | ③ Callback |
 |---|---|---|
-| [`0xff4b2163…`](https://sepolia.basescan.org/tx/0xff4b216379d1b7cfc068c32dde537ed30f75ce67909a3aa74614ed2e4ce1aa5a) · block 59015912 | [`0xcae7fcd8…`](https://lasna.reactscan.net/tx/0xcae7fcd8e035bb8940085940d42b55a8fb61b6890c7c5adc0e9afdfc1160b40e) | [`0xef98afe1…`](https://sepolia.basescan.org/tx/0xef98afe15fa08397a209e7c30f3dceac688536cc97bd0248c98bd4a451d440a0) · block 59015919 → **7 blocks ≈ 1.4 s** (take-profit, rule 25) |
+| [`0xff4b2163…`](https://sepolia.basescan.org/tx/0xff4b216379d1b7cfc068c32dde537ed30f75ce67909a3aa74614ed2e4ce1aa5a) · block 59015912 | [`0xcae7fcd8…`](https://lasna.reactscan.net/tx/0xcae7fcd8e035bb8940085940d42b55a8fb61b6890c7c5adc0e9afdfc1160b40e) | [`0xef98afe1…`](https://sepolia.basescan.org/tx/0xef98afe15fa08397a209e7c30f3dceac688536cc97bd0248c98bd4a451d440a0) · block 59015919 → **7 blocks ≈ 1.4 s** |
 
-**Week 2 live run (v4):** one crash swap fired a **trailing stop (6 blocks ≈ 1.2 s)** and a **self-re-centring LP guard (9 blocks ≈ 1.8 s)** from a single reactive transaction: the LP position was withdrawn, re-opened as a same-width position around the new price, and is guarded again. Details and every tx: [`deployments/tx-proofs.md`](deployments/tx-proofs.md#week-2-live-run-trailing-stop--self-re-centring-lp-guard-v4-base-sepolia-2026-11-15). On v4.1 a **trailing stop followed the price up twice** (each raise requested by Reactive and verified by the executor against the live tick), then fired at the raised level. Earlier single-chain proofs (v1/v2) are in the same file.
+### Beyond a simple stop: also proven live
 
-**Vault, live on Base:** after a deposit and 90 seconds with no trades, a ~9% crash made the vault **evacuate in
-9 blocks ≈ 1.8 s**; after 60 calm seconds it **re-entered in 8 blocks ≈ 1.6 s**. The v1 vault had re-centred into
-that same crash (a bug, below); v1 also shows a live re-centre in 9 blocks. Every tx:
-[`deployments/tx-proofs.md`](deployments/tx-proofs.md#run-parallax-vault-v2-fixed-brain-live-on-base-sepolia-2026-11-15).
+| Run | What happened | Latency |
+|---|---|---|
+| **Two rules, one crash** | One crash swap fired a trailing stop **and** a re-centring LP guard from a single reactive tx. The LP was withdrawn, re-opened around the new price, and guarded again. | 1.2 s / 1.8 s |
+| **Trailing stop that follows the price** | The stop was raised twice as the price climbed, each raise requested by Reactive and checked against the live tick. It then fired at the raised level, ~8% tighter than where it started. | 2.4 s |
+| **Vault evacuates a crash** | After 90 quiet seconds, a ~9% crash made the vault pull all liquidity; after 60 calm seconds it re-entered. | 1.8 s / 1.6 s |
+| **Single-chain v1/v2** | Stop-loss, take-profit and range-guard withdrawals on Unichain | 2–3 s |
 
-## 7. Run it yourself
+Every tx for each run: [`deployments/tx-proofs.md`](deployments/tx-proofs.md).
+
+## 6. Safety: shown, not just claimed
+
+| Guarantee | How | Evidence |
+|---|---|---|
+| Only Reactive can trigger execution | `execute` / `raiseTrail` require `msg.sender == Callback Proxy` (`onlyServiceProvider`) **and** that the proxy-injected sender is our reactive contract (`onlyCallbackSender`). The library's sender check alone doesn't verify `msg.sender`, so we use both. | Foundry auth tests |
+| A stale trigger can't force a bad sale | The executor re-reads the pool tick and re-evaluates the rule. If the price bounced back, it emits `RuleSkipped` and Reactive re-arms the rule. | Tests + live re-arm path |
+| Never executes twice | Rules are single-shot; a repeat emits `RuleSkipped(NOT_ACTIVE)` | Tests |
+| Slippage-capped | Floors come from the live spot price (swaps) or from the exact out-of-range amounts (LP withdrawals) | Tests |
+| Trailing stops can't be moved too far | A raise is computed from the **live** tick, so a stop never moves further than the price justifies | Live v4.1 run |
+| Benign failures don't revert | A reverted callback is still billed and is invisible to the reactive side, so the executor reports misses as events instead | Design + tests |
+| Re-centring is atomic | Self-call wrapped in `try`; balances measured against a baseline, so other users' deposits are never touched | Fork tests on real v4 |
+| Bounded gas | ≤ 25 rules per pool, ≤ 3 callbacks per swap; the re-centre's gas is asserted to fit its callback budget | Tests |
+| Timers use time, not blocks | `block.timestamp` for every window and timeout (Base produces a block every 200 ms) | Code |
+
+**Bugs we found live, and fixed:**
+- On v4, a trailing-stop raise ran out of gas: its 200k limit left only 24,023 gas after the Callback Proxy's reserve.
+  v4.1 raises the limit to 500k and adds a regression test that replays that exact budget. Verified live.
+- The v1 vault brain re-centred *into* a crash on a quiet pool. It now always compares against the last price it saw
+  (`test_crashAfterQuietSpell_stillEvacuates`), and v2 evacuated on the first try.
+
+## 7. Deployed contracts (testnet)
+
+| Contract | Chain | Address |
+|---|---|---|
+| **ParallaxReactive v4.1** (guards both chains) | Reactive Lasna (5318007) | [`0xDf554201dec784F0541FA5fc884240c73113e334`](https://lasna.reactscan.net/address/0xDf554201dec784F0541FA5fc884240c73113e334) |
+| **ParallaxExecutor v4.1** | Base Sepolia (84532) | [`0x2f772766ec926359093FA2d478FBDdcd828304Ff`](https://sepolia.basescan.org/address/0x2f772766ec926359093FA2d478FBDdcd828304Ff) |
+| **ParallaxExecutor v4.1** | Unichain Sepolia (1301) | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
+| **ParallaxVaultReactive v2** (vault brain) | Reactive Lasna (5318007) | [`0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24`](https://lasna.reactscan.net/address/0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24) |
+| **ParallaxVault v2** (`pxLP`) | Base Sepolia (84532) | [`0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F`](https://sepolia.basescan.org/address/0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F) |
+| Demo pool mUSDC / mWETH 0.3% (real Uniswap v4) | both | poolId `0xade8c1a3…6f89763c` |
+| v4 (first live trailing + re-centre run) | Lasna / Base / Unichain | `0x7b8f…e042` / `0x058a…254e` / `0xD83D…Ec9F` |
+| v3 (the 44-round benchmark) | Lasna / Base / Unichain | `0x52e2…eC89` / `0x4d4f…Cbf9` / `0x8633…1181` |
+
+Full addresses, deploy transactions and every third-party address with its source:
+[`deployments/addresses.md`](deployments/addresses.md).
+
+## 8. Run it yourself
 
 Full copy-paste guide: **[`docs/setup.md`](docs/setup.md)**. In short:
 
 ```bash
 git clone --recursive https://github.com/hari-hara-sudharsan/Parallax && cd Parallax
-./tw.sh test                       # 75 Foundry tests (unit + fork tests against real Uniswap v4)
+./tw.sh test                       # 93 Foundry tests (unit + fork tests against real Uniswap v4)
 ./tw.sh rehearse                   # free local rehearsal on a fork, no wallet needed
 cp .env.example .env               # add a testnet-only PRIVATE_KEY
 CHAIN=base ./tw.sh demo-pool       # tokens + v4 pool + liquidity
 ./tw.sh deploy-parallax            # reactive on Lasna + executors on Base and Unichain
 CHAIN=base ./tw.sh bench 30        # reproduce the benchmark
+CHAIN=base ./tw.sh keeper 20       # reproduce the keeper-bot baseline
 cd web && npm install && npm run dev   # dashboard on http://localhost:3000
 ```
 
 `./tw.sh help` lists every task (`make <task>` works too).
 
-## 8. Security considerations
-
-- **Callback auth, both checks**: `execute` / `raiseTrail` require `msg.sender == Callback Proxy`
-  (`onlyServiceProvider`) **and** the proxy-injected sender == our reactive contract (`onlyCallbackSender`). The
-  library's sender check alone would not verify `msg.sender`.
-- **Never trust the callback**: the executor re-reads the pool tick and re-evaluates the rule; a trailing-stop raise
-  is computed from the live tick, so a stop can never move further than the price justifies.
-- **Idempotent**: a rule executes once; repeats emit `RuleSkipped(NOT_ACTIVE)`.
-- **Benign failures don't revert**: a reverted callback is still billed and invisible to the reactive side, so stale
-  triggers and slippage misses emit `RuleSkipped` and the reactive contract re-arms the rule.
-- **Slippage floors** from the live spot price (swaps) or the exact out-of-range amounts (LP withdrawals).
-- **Atomic re-centring** via a self-call wrapped in `try`; balances are measured against a baseline so other users'
-  deposits are never touched.
-- **Bounded gas**: ≤25 rules per pool, ≤3 callbacks per swap; the re-centre's gas is asserted to fit the callback budget.
-- `react()` never reverts as a filter; `block.timestamp` (never block counts) for every timeout.
-
 ## 9. Known limitations
 
-- **Testnet only, not audited.** Mock tokens; our own liquidity in the demo pool.
-- **Market sells**: a gap through the stop fills at the gapped price, or skips if worse than your slippage cap.
-- **No pure cross-chain signal** ("Base price → act on Unichain"): the executor could not re-validate a remote price,
-  so each chain's executor acts only on its own pool. One reactive contract still serves both chains.
-- **Funding is real**: the reactive contract pays lREACT per reactive tx and each executor pays ETH per callback; any
-  debt pauses service (by design of Reactive Network).
-- **Found and fixed live:** on v4 the trailing-stop raise callback ran out of gas (its 200k limit left 24,023 gas
-  after the Callback Proxy's reserve). Fixed in v4.1 (500k, plus a regression test replaying that exact budget) and
-  verified live: see the proof file.
-
-- **Found and fixed live (vault):** on a quiet pool the v1 brain's 60-second price window was empty, so a 10% crash
-  looked like a slow drift and the vault re-centred into it instead of evacuating. The brain now always compares
-  against the last price it saw (regression test `test_crashAfterQuietSpell_stillEvacuates`); v2 evacuated on the
-  first try in the same scenario.
-- **Vault scope:** one pool, one range width, fixed tuning (±3%, 2% breaker, 60 s); a fast round-trip can cost it
-  versus a passive LP (see "What it does").
+- **Testnet only, not audited.** The tokens are mocks and the demo pool holds our own liquidity. The pool itself is
+  real Uniswap v4.
+- **Market sells.** A gap through the stop fills at the gapped price, or skips if that is worse than your slippage cap.
+  It never fills at a price you didn't allow.
+- **No pure cross-chain signal** (Base price → act on Unichain), by design: an executor can't re-validate a remote
+  price, so each executor acts only on its own chain's pool. One reactive contract still serves both chains.
+- **Funding is real.** The reactive contract pays lREACT per reactive tx and each executor pays ETH per callback. Any
+  debt pauses service, which is how Reactive Network is designed.
+- **Vault scope:** one pool, one range width and fixed tuning (±3%, a 2% breaker, 60 s). A fast round trip can leave it
+  behind a passive LP.
 
 ## 10. Roadmap
 
-Liquidation shield for Aave positions · depeg exits for stable pools · more pools and chains · gas-sponsored rules ·
+Depeg exits for stable pools · liquidation shield for Aave positions · more pools and chains · gas-sponsored rules ·
 mainnet.
 
 ---
 
-Repo map: `contracts/` (Foundry: `src/ParallaxExecutor.sol`, `src/ParallaxReactive.sol`) · `web/` (Next.js dashboard) ·
-`bench/` (live benchmark + keeper baseline) · `results/` · `deployments/` · `docs/` · `tw.sh` (task runner).
-MIT licensed.
+**Repo map:** `contracts/` (Foundry: `src/ParallaxExecutor.sol`, `src/ParallaxReactive.sol`, the vault) · `web/`
+(Next.js dashboard) · `bench/` (live benchmark + keeper baseline) · `results/` · `deployments/` · `docs/` · `tw.sh`
+(task runner). MIT licensed.
