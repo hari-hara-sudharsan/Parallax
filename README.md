@@ -18,7 +18,7 @@ official Uniswap v4 contracts. No bot, no server and no hot key are involved, an
 | 🦄 **Real DeFi** | The official Uniswap v4 `PoolManager` and `PositionManager` on **both** chains, not a mock pool |
 | 🧠 **Real reactive work** | The reactive contract holds the order book, decides what crossed, raises trailing stops and re-arms stale triggers |
 | 🧪 **Tested** | **93 Foundry tests**, including fork tests against live Uniswap v4 |
-| 🖥️ **Dashboard** | [hari-hara-sudharsan.github.io/Parallax](https://hari-hara-sudharsan.github.io/Parallax/) (connect MetaMask on Base Sepolia) |
+| 🖥️ **Dashboard** | **[parallax-kappa-six.vercel.app](https://parallax-kappa-six.vercel.app)**: open the app, connect MetaMask on Base Sepolia, arm a stop, press "Crash the price" |
 
 ---
 
