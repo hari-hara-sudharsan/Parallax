@@ -8,7 +8,7 @@ import { CHAINS, LINKS } from "@/lib/deployment";
 import { fmtUsd } from "@/lib/price";
 import { PROOFS } from "@/lib/proofs";
 import { Mark } from "./Header";
-import { AnimatedNumber, cx } from "./ui";
+import { cx } from "./ui";
 
 /*
  * The Parallax home page ("One motif", seed 526283314).
@@ -102,8 +102,8 @@ function Hero() {
   const facts = useFacts();
   const [replay, setReplay] = useState(0);
   return (
-    <header className="relative min-h-[100svh] overflow-hidden">
-      <nav className="relative z-20 mx-auto flex max-w-[1360px] items-center justify-between px-5 pt-6 md:px-10">
+    <header className="relative min-h-[min(100svh,820px)] overflow-hidden">
+      <nav className="relative z-20 mx-auto flex max-w-[1200px] items-center justify-between px-5 pt-6 md:px-10">
         <Link href="/" className="flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.02em]">
           <Mark size={32} /> Parallax
         </Link>
@@ -123,30 +123,30 @@ function Hero() {
       {/* The motif at enormous scale: right of centre on desktop, at the bottom on a phone. */}
       <div
         aria-hidden
-        className="lp-shutter absolute bottom-[-16svh] left-[-12vw] right-[-12vw] top-[66svh] rounded-full bg-active lg:bottom-[-22vh] lg:left-[47vw] lg:right-[-34vw] lg:top-[10vh]"
+        className="lp-shutter absolute bottom-[-16svh] left-[-12vw] right-[-12vw] top-[66svh] rounded-full bg-active lg:bottom-[-20%] lg:left-[54%] lg:right-[-30%] lg:top-[14%]"
       >
         <div className="lp-settle absolute inset-0">
           <HeroLoop key={replay} loop={loop} />
         </div>
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-80px)] max-w-[1360px] flex-col justify-start px-5 pt-[8svh] md:px-10 lg:justify-center lg:pt-0">
-        <div className="max-w-[640px] lg:max-w-[42vw]">
-          <h1 className="m-view text-[clamp(52px,11.5vw,88px)] font-bold leading-[0.98] tracking-[-0.04em] lg:text-[clamp(64px,6.4vw,100px)]">
+      <div className="relative z-10 mx-auto flex min-h-[min(calc(100svh-80px),740px)] max-w-[1200px] flex-col justify-start px-5 pt-[8svh] md:px-10 lg:justify-center lg:pt-0">
+        <div className="max-w-[640px] lg:max-w-[540px]">
+          <h1 className="m-view text-[clamp(44px,11vw,72px)] font-bold leading-[0.98] tracking-[-0.04em] lg:text-[clamp(52px,min(5.4vw,11svh),84px)]">
             Stops that
             <br />
             never sleep.
           </h1>
-          <p className="m-view mt-7 max-w-[34ch] text-[17px] leading-7 text-muted lg:mt-10 lg:text-[19px] lg:leading-8" style={{ animationDelay: "120ms" }}>
+          <p className="m-view mt-6 max-w-[36ch] text-[16px] leading-7 text-muted lg:mt-7 lg:text-[17px]" style={{ animationDelay: "120ms" }}>
             Parallax sells your Uniswap position the moment the price crosses your line, about{" "}
             <span className="num whitespace-nowrap text-ink">{facts.baseSeconds.toFixed(1)} s</span> later. Reactive Network runs it, so there is no bot to fail.
           </p>
-          <div className="m-view mt-9 flex flex-wrap items-center gap-4" style={{ animationDelay: "220ms" }}>
-            <Link href="/app#guards" className="m-lift inline-flex h-[56px] items-center gap-3 rounded-full bg-ink px-8 text-[17px] font-semibold text-bg">
+          <div className="m-view mt-8 flex flex-wrap items-center gap-3" style={{ animationDelay: "220ms" }}>
+            <Link href="/app#guards" className="m-lift inline-flex h-12 items-center gap-3 rounded-full bg-ink px-6 text-[16px] font-semibold text-bg">
               Open the app <span className="lp-bullet" aria-hidden><i /><i /><i /></span>
             </Link>
             {loop && (
-              <button type="button" onClick={() => setReplay((r) => r + 1)} className="m-lift hidden h-[56px] rounded-full px-5 text-[16px] text-muted transition-colors hover:text-ink lg:inline-block">
+              <button type="button" onClick={() => setReplay((r) => r + 1)} className="m-lift hidden h-12 rounded-full px-4 text-[15px] text-muted transition-colors hover:text-ink lg:inline-block">
                 ↻ Replay the last loop
               </button>
             )}
@@ -191,7 +191,7 @@ function Dot({ x, delay, big, hollow }: { x: Pos; delay: number; big?: boolean; 
     <span
       className={cx(
         "lp-pop absolute left-[var(--x)] top-[38%] rounded-full lg:left-[var(--xl)] lg:top-1/2",
-        big ? "h-9 w-9 bg-black lg:h-12 lg:w-12" : "h-6 w-6 lg:h-8 lg:w-8",
+        big ? "h-9 w-9 bg-black lg:h-10 lg:w-10" : "h-6 w-6 lg:h-7 lg:w-7",
         hollow ? "bg-active ring-[5px] ring-inset ring-black" : !big && "bg-black",
       )}
       style={{ ...px(x), "--delay": `${delay}ms` } as CSSProperties}
@@ -201,9 +201,9 @@ function Dot({ x, delay, big, hollow }: { x: Pos; delay: number; big?: boolean; 
 
 function Label({ x, delay, top, sub, strong }: { x: Pos; delay: number; top: string; sub: string; strong?: boolean }) {
   return (
-    <span className="lp-fade absolute left-[var(--x)] top-[calc(38%+30px)] -translate-x-1/2 whitespace-nowrap text-center lg:left-[var(--xl)] lg:top-[calc(50%+44px)]" style={{ ...px(x), "--delay": `${delay}ms` } as CSSProperties}>
-      <span className={cx("num block font-semibold leading-[1.1] tracking-[-0.02em]", strong ? "text-[24px] lg:text-[40px]" : "text-[16px] lg:text-[24px]")}>{top}</span>
-      <span className="mt-1 block text-[13px] leading-[1.3] text-black/70 lg:text-[16px]">{sub}</span>
+    <span className="lp-fade absolute left-[var(--x)] top-[calc(38%+30px)] -translate-x-1/2 whitespace-nowrap text-center lg:left-[var(--xl)] lg:top-[calc(50%+36px)]" style={{ ...px(x), "--delay": `${delay}ms` } as CSSProperties}>
+      <span className={cx("num block font-semibold leading-[1.1] tracking-[-0.02em]", strong ? "text-[24px] lg:text-[32px]" : "text-[16px] lg:text-[19px]")}>{top}</span>
+      <span className="mt-1 block text-[13px] leading-[1.3] text-black/70 lg:text-[14px]">{sub}</span>
     </span>
   );
 }
@@ -222,11 +222,11 @@ function Frame({ children }: { children: ReactNode }) {
 
 function Intro() {
   return (
-    <section aria-labelledby="problem" className="mx-auto max-w-[1360px] px-5 py-[16vh] md:px-10">
+    <section aria-labelledby="problem" className="mx-auto max-w-[1200px] px-5 py-20 md:px-10 md:py-24">
       <h2 id="problem" className="sr-only">
         The problem
       </h2>
-      <p data-reveal className="mx-auto max-w-[24ch] text-[24px] font-semibold leading-[1.25] tracking-[-0.025em] md:max-w-[32ch] md:text-[32px] md:leading-[1.2] lg:max-w-[30ch] lg:text-[36px]">
+      <p data-reveal className="max-w-[24ch] text-[24px] font-semibold leading-[1.25] tracking-[-0.025em] md:max-w-[32ch] md:text-[28px] md:leading-[1.25] lg:max-w-[34ch] lg:text-[32px]">
         Uniswap has no stop-loss <Frame><span className="text-danger">−12%</span></Frame>. Keeper bots go offline or arrive late{" "}
         <Frame><span className="num text-muted">+10 blocks</span></Frame>, and a late exit costs the most.
       </p>
@@ -280,16 +280,16 @@ function HowItWorks() {
   return (
     <section id="how" aria-labelledby="how-h" className="grid md:grid-cols-2 lg:grid-cols-4">
       {STEPS.map((s, i) => (
-        <div key={i} data-reveal style={S(i)} className={cx("relative flex min-h-[64svh] flex-col px-5 pb-8 pt-8 md:min-h-[56svh] md:px-7 lg:min-h-[84svh]", s.field)}>
+        <div key={i} data-reveal style={S(i)} className={cx("relative flex min-h-[440px] flex-col px-5 pb-8 pt-8 md:min-h-[460px] md:px-7 lg:min-h-[500px]", s.field)}>
           {i === 0 && (
-            <h2 id="how-h" className="whitespace-nowrap text-[24px] font-bold tracking-[-0.02em] md:text-[32px]">
+            <h2 id="how-h" className="absolute left-5 top-8 whitespace-nowrap text-[22px] font-bold tracking-[-0.02em] md:left-7 md:text-[26px]">
               How it works
             </h2>
           )}
           <div className="flex flex-1 items-center justify-start md:justify-center">
             <RuleCard step={i} />
           </div>
-          <p className={cx("max-w-[16ch] text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] lg:text-[clamp(22px,2vw,32px)]", i === 3 ? "text-black" : "text-ink")}>
+          <p className={cx("min-h-[2.4em] max-w-[16ch] text-[22px] font-semibold leading-[1.2] tracking-[-0.02em] lg:text-[24px]", i === 3 ? "text-black" : "text-ink")}>
             {s.clause}
           </p>
         </div>
@@ -311,38 +311,40 @@ function Showcase() {
   return (
     <section
       aria-labelledby="show-h"
-      className={cx("relative min-h-[72svh] overflow-hidden transition-colors duration-500 lg:min-h-[86svh]", take ? "bg-ink text-black" : "bg-active text-black")}
+      className={cx("relative overflow-hidden transition-colors duration-500", take ? "bg-ink text-black" : "bg-active text-black")}
     >
-      <div className="mx-auto max-w-[1360px] px-5 pt-14 md:px-10 md:pt-20">
-        <h2 id="show-h" data-reveal className="text-[26px] font-bold leading-tight tracking-[-0.025em] md:text-[clamp(28px,2.6vw,40px)]">
-          Sell if it {take ? "rises" : "falls"}.
-        </h2>
-        <p data-reveal style={S(1)} className="mt-3 max-w-[38ch] text-[16px] leading-7 text-black/75 md:text-[17px]">
-          One switch decides which way you are protected. Your line now:{" "}
-          <span className="num font-semibold text-black">${fmtUsd(line)}</span>, {take ? "5% above" : "3% below"} the live price.
-        </p>
-      </div>
+      <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-5 py-16 md:flex-row md:items-center md:justify-between md:px-10 md:py-20">
+        <div>
+          <h2 id="show-h" data-reveal className="text-[26px] font-bold leading-tight tracking-[-0.025em] md:text-[clamp(28px,2.6vw,40px)]">
+            Sell if it {take ? "rises" : "falls"}.
+          </h2>
+          <p data-reveal style={S(1)} className="mt-3 max-w-[38ch] text-[16px] leading-7 text-black/75 md:text-[17px]">
+            One switch decides which way you are protected. Your line now:{" "}
+            <span className="num font-semibold text-black">${fmtUsd(line)}</span>, {take ? "5% above" : "3% below"} the live price.
+          </p>
+        </div>
 
-      {/* The real segmented control, built in em and enlarged to poster size; it works. */}
-      <div data-ui className="absolute bottom-[14svh] left-5 right-5 flex justify-center text-[clamp(22px,6.4vw,40px)] leading-none md:bottom-[16vh] md:left-auto md:right-10 md:block md:text-[clamp(36px,5vw,80px)]">
-        <div role="radiogroup" aria-label="Protect against" className="relative inline-grid grid-cols-[1fr_1fr] rounded-full bg-black/90 p-[0.12em]">
-          <span
-            aria-hidden
-            className="m-slide absolute bottom-[0.12em] left-[0.12em] top-[0.12em] w-[calc(50%-0.12em)] rounded-full bg-[#4a4a4f]"
-            style={{ transform: take ? "translateX(100%)" : "translateX(0)" }}
-          />
-          {(["stop", "take"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="radio"
-              aria-checked={mode === m}
-              onClick={() => setMode(m)}
-              className={cx("relative z-10 whitespace-nowrap rounded-full px-[0.7em] py-[0.32em] text-center font-semibold leading-[1.1] tracking-[-0.03em] transition-colors", mode === m ? "text-ink" : "text-muted hover:text-ink")}
-            >
-              {m === "stop" ? "Stop-loss" : "Take-profit"}
-            </button>
-          ))}
+        {/* The real segmented control, built in em and enlarged; it works. */}
+        <div data-ui className="flex shrink-0 justify-center text-[clamp(22px,6.4vw,32px)] leading-none md:block md:text-[clamp(28px,3.4vw,44px)]">
+          <div role="radiogroup" aria-label="Protect against" className="relative inline-grid grid-cols-[1fr_1fr] rounded-full bg-black/90 p-[0.12em]">
+            <span
+              aria-hidden
+              className="m-slide absolute bottom-[0.12em] left-[0.12em] top-[0.12em] w-[calc(50%-0.12em)] rounded-full bg-[#4a4a4f]"
+              style={{ transform: take ? "translateX(100%)" : "translateX(0)" }}
+            />
+            {(["stop", "take"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                onClick={() => setMode(m)}
+                className={cx("relative z-10 whitespace-nowrap rounded-full px-[0.7em] py-[0.32em] text-center font-semibold leading-[1.1] tracking-[-0.03em] transition-colors", mode === m ? "text-ink" : "text-muted hover:text-ink")}
+              >
+                {m === "stop" ? "Stop-loss" : "Take-profit"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -364,10 +366,10 @@ function Proof() {
     ["0", "bots, servers or keys of ours in the loop"],
   ];
   return (
-    <section id="proof" aria-labelledby="proof-h" className="mx-auto max-w-[1360px] px-5 py-24 md:px-10 md:py-32">
+    <section id="proof" aria-labelledby="proof-h" className="mx-auto max-w-[1200px] px-5 py-20 md:px-10 md:py-24">
       <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4 md:gap-2">
-        <div data-reveal className="col-span-2 flex min-h-[132px] flex-col justify-between gap-4 rounded-[20px] bg-active p-6 text-black lg:aspect-[3/1] lg:min-h-0">
-          <h2 id="proof-h" className="text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-[clamp(28px,3vw,48px)]">
+        <div data-reveal className="col-span-2 flex min-h-[132px] flex-col justify-between gap-4 rounded-[20px] bg-active p-6 text-black md:min-h-[140px]">
+          <h2 id="proof-h" className="text-[26px] font-bold leading-tight tracking-[-0.025em] md:text-[clamp(26px,2.6vw,38px)]">
             Measured, not promised
           </h2>
           <Link href="/app#proof" className="text-[16px] font-medium underline decoration-black/30 underline-offset-4 hover:decoration-black">
@@ -375,9 +377,9 @@ function Proof() {
           </Link>
         </div>
         {tiles.map(([big, small], i) => (
-          <div key={big + small} data-reveal style={S(i + 1)} className="flex aspect-[3/2] flex-col justify-end rounded-[20px] bg-panel p-5 md:p-6">
-            <span className="num whitespace-nowrap text-[24px] font-bold leading-tight tracking-[-0.025em] md:text-[28px] lg:text-[40px]">{big}</span>
-            <span className="mt-1 text-[13px] leading-5 text-muted md:text-[15px]">{small}</span>
+          <div key={big + small} data-reveal style={S(i + 1)} className="flex min-h-[120px] flex-col justify-end rounded-[20px] bg-panel p-5 md:min-h-[140px] md:p-6">
+            <span className="num whitespace-nowrap text-[24px] font-bold leading-tight tracking-[-0.025em] md:text-[28px] lg:text-[32px]">{big}</span>
+            <span className="mt-1 min-h-[40px] text-[13px] leading-5 text-muted md:text-[15px]">{small}</span>
           </div>
         ))}
       </div>
@@ -396,8 +398,8 @@ function Tile({ className, caption, line, children, i }: { className: string; ca
         {children}
       </div>
       <div>
-        <div className="text-[18px] font-medium leading-6">{caption}</div>
-        <div className="mt-0.5 text-[15px] leading-5 text-muted">{line}</div>
+        <div className="text-[16px] font-medium leading-6">{caption}</div>
+        <div className="mt-0.5 text-[14px] leading-5 text-muted">{line}</div>
       </div>
     </div>
   );
@@ -405,15 +407,15 @@ function Tile({ className, caption, line, children, i }: { className: string; ca
 
 function Features() {
   return (
-    <section aria-labelledby="feat-h" className="mx-auto max-w-[1360px] px-5 pb-24 md:px-10 md:pb-32">
-      <div className="grid auto-rows-[28vw] grid-cols-2 gap-1.5 md:auto-rows-[104px] md:grid-cols-12 md:gap-2">
+    <section aria-labelledby="feat-h" className="mx-auto max-w-[1200px] px-5 pb-20 md:px-10 md:pb-24">
+      <div className="grid auto-rows-[96px] grid-cols-2 gap-1.5 md:auto-rows-[72px] md:grid-cols-12 md:gap-2">
         <div data-reveal className="col-span-2 row-span-2 flex items-start rounded-[20px] bg-panel p-6 md:col-span-6 md:row-span-2">
-          <h2 id="feat-h" className="text-[9vw] font-bold leading-none tracking-[-0.035em] md:text-[clamp(36px,4vw,60px)]">
+          <h2 id="feat-h" className="text-[32px] font-bold leading-none tracking-[-0.035em] md:text-[clamp(32px,3.2vw,44px)]">
             Everything it guards
           </h2>
         </div>
         <Tile i={1} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-2" caption="Trailing stop" line="Follows the price up">
-          <span className="inline-block rounded-full bg-active/15 px-[0.5em] py-[0.15em] text-[32px] font-semibold leading-[1.15] text-active md:text-[44px]">−2%</span>
+          <span className="inline-block rounded-full bg-active/15 px-[0.5em] py-[0.15em] text-[26px] font-semibold leading-[1.15] text-active md:text-[30px]">−2%</span>
         </Tile>
         <Tile i={2} className="row-span-2 bg-panel md:col-span-3 md:row-span-2" caption="Range guard" line="Re-centres your LP">
           <span className="relative block h-[10px] w-full max-w-[260px] rounded-full bg-raised">
@@ -421,28 +423,28 @@ function Features() {
             <span className="absolute left-[44%] top-[-14px] h-[38px] w-[3px] rounded bg-ink" />
           </span>
         </Tile>
-        <Tile i={3} className="col-span-2 row-span-3 bg-panel md:col-span-6 md:row-span-4" caption="Stop-loss" line="Drag the line; that is the whole setup">
-          <span className="block w-full max-w-[520px] px-[0.45em] text-[48px] md:text-[64px]">
+        <Tile i={3} className="col-span-2 row-span-3 bg-panel md:col-span-6 md:row-span-3" caption="Stop-loss" line="Drag the line; that is the whole setup">
+          <span className="block w-full max-w-[420px] px-[0.45em] text-[36px] md:text-[40px]">
             <span className="relative block h-[0.16em] rounded-full bg-raised">
               <span className="absolute inset-y-0 left-0 w-[46%] rounded-full bg-active" />
               <span className="absolute left-[46%] top-1/2 h-[0.9em] w-[0.9em] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-[0.08em] ring-black/30" />
             </span>
           </span>
         </Tile>
-        <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-4" caption="Re-checked on‑chain" line="Nothing executes on stale data">
-          <span className="inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[24px] font-semibold leading-[1.15] text-executed md:text-[30px] lg:text-[44px]">Executed</span>
+        <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-3" caption="Re-checked on‑chain" line="Nothing executes on stale data">
+          <span className="inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[22px] font-semibold leading-[1.15] text-executed md:text-[26px] lg:text-[30px]">Executed</span>
         </Tile>
-        <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-4" caption="About a second" line="Swap to execution on Base">
-          <span className="num block text-[72px] font-bold leading-none tracking-[-0.05em] md:text-[110px]">1.6</span>
+        <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-3" caption="About a second" line="Swap to execution on Base">
+          <span className="num block text-[56px] font-bold leading-none tracking-[-0.05em] md:text-[64px]">1.6</span>
         </Tile>
         <Tile i={6} className="col-span-2 row-span-2 bg-panel md:col-span-6 md:row-span-2" caption="Vault" line="Steps out of a crash, back in when calm">
-          <span className="flex flex-wrap gap-3 text-[20px] font-semibold leading-[1.15] md:text-[30px]">
+          <span className="flex flex-wrap gap-2.5 text-[18px] font-semibold leading-[1.15] md:text-[22px]">
             <span className="whitespace-nowrap rounded-full bg-danger/15 px-[0.5em] py-[0.1em] text-danger">Evacuated</span>
             <span className="whitespace-nowrap rounded-full bg-executed/15 px-[0.5em] py-[0.1em] text-executed">Re‑entered</span>
           </span>
         </Tile>
         <Tile i={7} className="col-span-2 row-span-2 bg-[#202023] md:col-span-6 md:row-span-2" caption="Base and Unichain" line="One reactive contract guards both">
-          <span className="inline-flex rounded-full bg-raised p-[0.1em] text-[20px] font-semibold leading-[1.15] md:text-[30px]">
+          <span className="inline-flex rounded-full bg-raised p-[0.1em] text-[18px] font-semibold leading-[1.15] md:text-[22px]">
             <span className="rounded-full bg-[#4a4a4f] px-[0.6em] py-[0.1em]">Base</span>
             <span className="px-[0.6em] py-[0.1em] text-muted">Unichain</span>
           </span>
@@ -462,9 +464,9 @@ function Cta() {
   const href = `/app?kind=${kind}&amount=${encodeURIComponent(amount || "1")}#guards`;
   return (
     <section aria-labelledby="cta-h" className="relative bg-active text-black">
-      <div className="mx-auto grid min-h-[72svh] max-w-[1360px] items-center gap-10 px-5 py-16 md:min-h-[76svh] md:grid-cols-12 md:px-10 md:py-20">
+      <div className="mx-auto grid max-w-[1200px] items-center gap-10 px-5 py-16 md:grid-cols-12 md:px-10 md:py-20">
         <div className="flex flex-col justify-center md:col-span-5">
-          <h2 id="cta-h" data-reveal className="text-[13vw] font-bold leading-[0.92] tracking-[-0.045em] md:text-[clamp(56px,7vw,112px)]">
+          <h2 id="cta-h" data-reveal className="text-[52px] font-bold leading-[0.95] tracking-[-0.045em] md:text-[clamp(52px,5.4vw,80px)]">
             Set your
             <br />
             line.
@@ -473,7 +475,7 @@ function Cta() {
             The app opens with this filled in. Connect a wallet on Base Sepolia, drag your line, and Parallax watches it from then on.
           </p>
         </div>
-        <div className="flex items-end md:col-span-6 md:col-start-7 md:items-center">
+        <div className="flex items-end md:col-span-6 md:col-start-7 md:items-center md:justify-end">
           <div data-ui data-reveal style={S(2)} className="w-full max-w-[440px] rounded-[24px] bg-panel p-7 text-ink shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
             <div className="text-[19px] font-semibold tracking-[-0.02em]">Protect a position</div>
             <div className="mt-5 inline-flex rounded-full bg-raised p-[3px]">
@@ -523,10 +525,10 @@ function Footer() {
     ["Runs on", [["Reactive Network", "https://reactive.network"], ["Uniswap v4", "https://docs.uniswap.org/contracts/v4/overview"]]],
   ];
   return (
-    <footer className="bg-bg px-5 pb-10 pt-20 md:px-10">
-      <div className="mx-auto max-w-[1360px]">
+    <footer className="bg-bg pb-10 pt-16">
+      <div className="mx-auto max-w-[1200px] px-5 md:px-10">
         {/* The motif, built from flat shapes with 4px gaps: track segments and three stations. */}
-        <svg viewBox="0 0 1200 240" className="h-auto w-full" role="img" aria-label="Parallax">
+        <svg viewBox="0 0 1200 240" className="h-auto w-full max-w-[480px]" role="img" aria-label="Parallax">
           <rect x="0" y="0" width="1200" height="240" rx="120" fill="rgb(var(--active))" />
           <rect x="150" y="114" width="296" height="12" rx="6" fill="#000" />
           <rect x="450" y="114" width="296" height="12" rx="6" fill="#000" />
@@ -538,7 +540,7 @@ function Footer() {
             Parallax
           </text>
         </svg>
-        <div className="mt-14 grid gap-10 sm:grid-cols-2 md:grid-cols-12">
+        <div className="mt-10 grid gap-10 sm:grid-cols-2 md:grid-cols-12">
           {cols.map(([h, links]) => (
             <div key={h} className="md:col-span-2">
               <div className="text-[15px] text-faint">{h}</div>
@@ -564,7 +566,7 @@ function Footer() {
             <p className="mt-3 text-[15px] leading-6 text-ink">Reactive Omni Buildathon, Track 1 “Every Second Counts”. Testnet only, not audited.</p>
           </div>
         </div>
-        <div className="mt-14 flex items-center justify-between gap-4">
+        <div className="mt-12 flex items-center justify-between gap-4">
           <span className="text-[13px] text-faint">Parallax · MIT licence</span>
           <Link href="/app#guards" className="m-lift rounded-full bg-ink px-5 py-2 text-[15px] font-semibold text-bg">
             Open the app
