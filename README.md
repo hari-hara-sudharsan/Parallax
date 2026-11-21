@@ -2,11 +2,12 @@
 
 [![Contracts](https://github.com/hari-hara-sudharsan/Parallax/actions/workflows/test.yml/badge.svg)](https://github.com/hari-hara-sudharsan/Parallax/actions/workflows/test.yml)
 
-### A guard that watches your Uniswap v4 position from a parallel chain, and acts within about 1.4 seconds.
+### Your Uniswap v4 positions, guarded from a parallel chain. It exits, re-centres or panics for you within about 1.4 seconds.
 
-Set a stop-loss, take-profit, trailing stop or LP range guard once. A reactive contract on **Reactive Omni** watches
-every swap on **Base Sepolia and Unichain Sepolia**. When the price crosses your line it calls back and executes on the
-official Uniswap v4 contracts. No bot, no server and no hot key are involved, and nothing you run has to stay online.
+Arm a rule once: stop-loss, take-profit, trailing stop, or an LP range guard that **re-centres your liquidity** when the
+price leaves it. A reactive contract on **Reactive Omni** watches every swap on **Base Sepolia and Unichain Sepolia** and
+acts on the official Uniswap v4 contracts. One **Panic Exit** transaction closes everything you hold, on **both** chains.
+No bot, no server, no hot key, and nothing you run has to stay online.
 
 > Reactive Omni Buildathon · Track 1 **Every Second Counts** · built Nov 2026 · MIT
 
@@ -15,11 +16,14 @@ official Uniswap v4 contracts. No bot, no server and no hot key are involved, an
 | | |
 |---|---|
 | ⚡ **Speed** | **Median 7 Base blocks ≈ 1.4 s** from the price-crossing swap to the executed sell (p90 2.0 s, fastest 1.0 s) |
-| ✅ **Reliability** | **44 / 44** benchmark rounds filled on two chains, and every tx hash is published |
+| 💰 **Why seconds matter** | Replaying the 10 Oct 2025 crash, a 1.4 s fill keeps **$325 per $100k** at the worst 5% of seconds vs the same loop on legacy Reactive ([method](results/what-a-second-buys.md)) |
 | 🤖 **vs a keeper bot** | Same pool, same crossing swap: a 250 ms-polling bot with a warm RPC needs **10 blocks ≈ 2.0 s**. Parallax is **~30% faster** and needs no infrastructure |
+| 🚨 **Panic Exit** | One transaction on either chain closes every rule you have, there, and Reactive closes the rest on the other chain |
+| 🌀 **LP that heals itself** | A range guard re-opens your position around the new price instead of leaving it out of range; the `pxLP` vault steps out of crashes and back in |
 | 🦄 **Real DeFi** | The official Uniswap v4 `PoolManager` and `PositionManager` on **both** chains, not a mock pool |
-| 🧠 **Real reactive work** | The reactive contract holds the order book, decides what crossed, raises trailing stops and re-arms stale triggers |
-| 🧪 **Tested** | **93 Foundry tests**, including fork tests against live Uniswap v4 |
+| 🧠 **Real reactive work** | The reactive contract holds the order book, decides what crossed, raises trailing stops, re-arms stale triggers and relays panics across chains |
+| 🎮 **Try it with only gas** | `ParallaxTryout`: `arm()` gives you a funded stop, `crash(id)` crosses it. Reactive does the rest (first live run filled in **6 blocks ≈ 1.2 s**) |
+| 🧪 **Tested to break** | **119 Foundry tests** (fork tests on live v4, invariant fuzzing with lost and reordered events), guards checked by [mutation testing](results/mutants.md), [CI](.github/workflows/test.yml), 93% line coverage, Slither triaged, every contract **Sourcify-verified** |
 | 🖥️ **Dashboard** | **[parallax-kappa-six.vercel.app](https://parallax-kappa-six.vercel.app)**: open the app, connect MetaMask on Base Sepolia, arm a stop, press "Crash the price" |
 
 ---
@@ -51,6 +55,18 @@ cast call --rpc-url https://lasna-rpc.rnk.dev/ 0x8888888888888888888888888888888
 # 4. Every transaction linked in these docs exists on its chain
 node bench/check-links.mjs
 ```
+
+**Run a loop yourself, with only gas.** Any Base Sepolia account can do this; `ParallaxTryout` mints the demo tokens:
+
+```bash
+T=0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44; RPC=https://sepolia.base.org   # needs Foundry's cast and jq
+TX=$(cast send $T "arm()" --rpc-url $RPC --private-key $YOUR_TESTNET_KEY --json | jq -r .transactionHash)
+ID=$(cast receipt $TX --rpc-url $RPC --json | jq -r '.logs[] | select(.address == "0xb56bf536cb864a4a848f00c1b4ebf27c6f1cae44") | .topics[2]' | cast to-dec)
+echo "your stop: rule $ID"   # wait ~5 s for Lasna to mirror it, then cross it:
+cast send $T "crash(uint256)" $ID --rpc-url $RPC --private-key $YOUR_TESTNET_KEY
+```
+
+Or `CHAIN=base ./tw.sh tryout`, which does the same and prints the origin, reactive and callback hashes with the latency.
 
 Every claim in this README is mapped to its proof (transaction, test or command) in [`docs/CLAIMS.md`](docs/CLAIMS.md).
 What Parallax refuses to do, shown as real transactions: [`results/REFUSALS.md`](results/REFUSALS.md).
@@ -111,6 +127,7 @@ run on legacy Reactive.
 | **Bracket** | either of the above, whichever comes first | sells your deposit |
 | **Trailing stop** | the price falls X% below its best level since you armed it | sells; the stop **only ever tightens** as the price rises |
 | **Range guard** | your v4 LP position leaves its range | withdraws liquidity + fees to you, **or re-centres**: re-opens a same-width position around the new price and keeps guarding it |
+| **Panic Exit** | you call `panic()` on either chain | closes all your rules there in the same tx (sells at market within each rule's slippage cap, or refunds); Reactive relays it and closes your rules on the other chain too |
 
 Every rule reduces to one test, `tick <= lowerTick || tick >= upperTick`, so one engine covers all five.
 

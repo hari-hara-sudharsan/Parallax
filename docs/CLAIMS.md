@@ -43,9 +43,25 @@ every transaction linked anywhere in the docs (198 of 198 found on 2026-11-21).
 | Slippage-capped | test | `test_execute_slippageExceeded_skipsAndKeepsDeposit` |
 | Bounded gas: ≤ 25 rules per pool, ≤ 3 callbacks per swap | test | `test_callbacksPerEventAreCapped`, `test_gas_fullPoolSwapStaysFarBelowReactiveCap`, `test_raiseTrail_fitsTheProxyGasBudget` |
 | Timers use `block.timestamp`, not block numbers | code | `PENDING_TIMEOUT` in `ParallaxReactive.sol`; the vault brain's windows |
-| 93 tests, 93% line / 75% branch coverage | cmd | `./tw.sh test`; [`results/coverage.md`](../results/coverage.md); CI on every push |
+| 119 tests (93% line / 75% branch coverage at v4.1) | cmd | `./tw.sh test`; [`results/coverage.md`](../results/coverage.md); CI on every push |
 | Slither: 73 results, none exploitable | cmd, doc | [`results/slither-triage.md`](../results/slither-triage.md) |
 | Every live contract is source-verified | cmd | Sourcify table in `deployments/addresses.md` |
+
+## v5 features
+
+| Claim | Proof | Where |
+|---|---|---|
+| One `panic()` closes all of the caller's rules on that chain in the same tx | test | `test_panic_closesEveryRuleHere`, `test_panic_onlyClosesYourOwnRules`, `test_panic_skipsSettledRules` |
+| Reactive relays the panic and the other chain's rules close too | test | `test_fullLoop_panicAcrossTwoChains` (second executor registered as a second chain, real recorded logs), `test_panic_relaysToEveryOtherChain` |
+| A sale that can't meet its slippage cap refunds the deposit instead | test | `test_panic_saleFails_refundsDeposit` |
+| A panic is bounded and always fits its callback gas (6 closes ≈ 645k of 3M) | test | `test_panic_boundedPerCall_thenFinishes`, `test_panicExit_fitsItsCallbackGas`, `test_panic_continuesWhileRulesRemain_thenStops` |
+| `panicExit` is only callable by the Callback Proxy carrying our reactive contract | test | `test_panicExit_auth_andCloses` |
+| A wallet with only gas can run a full loop through `ParallaxTryout` | tx, test | "v5 live" in [`deployments/tx-proofs.md`](../deployments/tx-proofs.md) (filled 6 blocks after the crash); `test_fullLoop_tryout` |
+| Vault deposits can't be sandwiched | test | `test_deposit_sandwichGainsNothing`, `test_deposit_pullsOnlyProportionalAmounts` |
+| A leaked owner key can be retired | test | `test_ownership_twoStepTransfer` |
+| Events lost during a debt pause can't leave a rule firing forever or never | test | `test_debtPause_missedExecuted_staleRuleIsDroppedNotRefired`, `test_debtPause_missedCreated_recoveredByReannounce`, `test_debtPause_missedCancelled_recoveredByRuleSettled`, `test_resync_reannouncesActiveAndSettledRules`; invariant suite with lost logs |
+| The reactive contract converges with the executor under random, late, duplicated and lost events | test | `ParallaxReactive.invariant.t.sol` |
+| Every guard is actually tested | cmd | `python contracts/mutation/mutants.py` → [`results/mutants.md`](../results/mutants.md) |
 
 ## Costs
 

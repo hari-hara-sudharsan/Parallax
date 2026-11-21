@@ -1,7 +1,7 @@
 import type { Address, Hex } from "viem";
 
 /**
- * The live testnet deployment (v4.1: multi-chain, trailing stops, re-centring range guards, raise-gas fix). Sources + deploy txs: deployments/addresses.md.
+ * The live testnet deployment (v5: multi-chain, trailing stops, re-centring range guards, Panic Exit, Tryout). Sources + deploy txs: deployments/addresses.md.
  * One ParallaxReactive on Reactive Lasna guards a ParallaxExecutor on each chain below.
  */
 
@@ -16,6 +16,7 @@ export type ChainDeployment = {
   blockMs: number; //        nominal block time
   executor: Address;
   executorDeployBlock: bigint;
+  tryout: Address; //         ParallaxTryout: arm a funded stop + crash it with only gas
   mockWETH: Address;
   mockUSDC: Address;
   poolId: Hex;
@@ -41,8 +42,9 @@ export const CHAINS: Record<ChainKey, ChainDeployment> = {
     name: "Unichain Sepolia",
     short: "Unichain",
     blockMs: 1000,
-    executor: "0x5F4159fEF569FbDe44C069751A57e38e97b1109D",
-    executorDeployBlock: 67884067n,
+    executor: "0x391eecF06CA701b891498040D1CEFed90d500030",
+    executorDeployBlock: 68399613n,
+    tryout: "0xacD95E9891d4C29871b643e3C5bF99a3D4d20AFA",
     mockWETH: MOCK_WETH,
     mockUSDC: MOCK_USDC,
     poolId: POOL_ID,
@@ -61,8 +63,9 @@ export const CHAINS: Record<ChainKey, ChainDeployment> = {
     name: "Base Sepolia",
     short: "Base",
     blockMs: 200,
-    executor: "0x2f772766ec926359093FA2d478FBDdcd828304Ff",
-    executorDeployBlock: 59073292n,
+    executor: "0x98f96fd0b1cb9B723157D3686446004EcA066982",
+    executorDeployBlock: 61651062n,
+    tryout: "0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44",
     mockWETH: MOCK_WETH,
     mockUSDC: MOCK_USDC,
     poolId: POOL_ID,
@@ -81,21 +84,21 @@ export const CHAIN_LIST = [CHAINS.base, CHAINS.unichain];
 export const chainById = (id: number) => CHAIN_LIST.find((c) => c.chainId === id);
 
 export const REACTIVE = {
-  address: "0xDf554201dec784F0541FA5fc884240c73113e334" as Address,
-  deployBlock: 8399503n, // Lasna nodes prune old blocks: searches start here, never at block 1
+  address: "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3" as Address,
+  deployBlock: 8881285n, // Lasna nodes prune old blocks: searches start here, never at block 1
   systemContract: "0x8888888888888888888888888888888888888888" as Address,
 };
 
 /**
- * Parallax Vault v2 (keeperless managed LP) on the Base demo pool. Its brain runs on Lasna.
+ * Parallax Vault v3 (keeperless managed LP, proportional deposits) on the Base demo pool. Its brain runs on Lasna.
  * v1 (retired, quiet-pool bug) is listed for the real-user count only. Sources: deployments/addresses.md.
  */
 export const VAULT = {
   chain: "base" as ChainKey,
-  address: "0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F" as Address,
-  deployBlock: 59098404n,
-  brain: "0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24" as Address,
-  brainDeployBlock: 8404251n,
+  address: "0x9c868A6e74a1D00cc0cD1524AED57c35515c4899" as Address,
+  deployBlock: 61652690n,
+  brain: "0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c" as Address,
+  brainDeployBlock: 8881631n,
   halfWidthTicks: 300,
   breakerTicks: 200,
   windowSeconds: 60,
