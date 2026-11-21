@@ -286,6 +286,10 @@ cd web && npm install && npm run dev   # dashboard on http://localhost:3000
 - **Funding is real.** The reactive contract pays lREACT per reactive tx and each executor pays ETH per callback. Any
   debt pauses service, which is how Reactive Network is designed. Measured: ≈ 0.020 lREACT per reactive tx, ≈ 0.06 lREACT
   per full loop, a negligible amount of ETH per callback ([`results/costs.md`](results/costs.md)).
+- **Events sent during a debt pause are lost, not queued.** Our fuzzing found what that does to v4.1: a missed
+  `RuleExecuted` makes a dead rule refire on every swap, and a missed `RuleCreated` means a rule never fires. The fix
+  is in `main` and ships with v5: the reactive contract drops a rule when the executor answers `NOT_ACTIVE`, and
+  anyone can call `executor.resync(ruleId)` after a pause to re-announce a rule's state.
 - **Vault deposits use the spot price.** A deposit is valued at the pool's current price, so a deposit sandwiched by
   two swaps could mint extra shares. A time-weighted reference is planned (see the Slither triage).
 - **Vault scope:** one pool, one range width and fixed tuning (±3%, a 2% breaker, 60 s). A fast round trip can leave it

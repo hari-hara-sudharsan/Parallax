@@ -96,18 +96,20 @@ contract ParallaxReactiveTest is Test {
         assertEq(reactive.RULE_EXECUTED_TOPIC0(), uint256(IParallaxExecutor.RuleExecuted.selector));
         assertEq(reactive.RULE_SKIPPED_TOPIC0(), uint256(IParallaxExecutor.RuleSkipped.selector));
         assertEq(reactive.RULE_UPDATED_TOPIC0(), uint256(IParallaxExecutor.RuleUpdated.selector));
+        assertEq(reactive.RULE_SETTLED_TOPIC0(), uint256(IParallaxExecutor.RuleSettled.selector));
         assertEq(reactive.SWAP_TOPIC0(), 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f);
     }
 
     function test_addChain_subscribesToAllRuleEvents() public view {
-        uint256[5] memory topics = [
+        uint256[6] memory topics = [
             reactive.RULE_CREATED_TOPIC0(),
             reactive.RULE_CANCELLED_TOPIC0(),
             reactive.RULE_EXECUTED_TOPIC0(),
             reactive.RULE_SKIPPED_TOPIC0(),
-            reactive.RULE_UPDATED_TOPIC0()
+            reactive.RULE_UPDATED_TOPIC0(),
+            reactive.RULE_SETTLED_TOPIC0()
         ];
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 6; ++i) {
             assertTrue(
                 sys.subscribed(address(reactive), CHAIN, EXECUTOR, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE)
             );
@@ -154,6 +156,36 @@ contract ParallaxReactiveTest is Test {
         _react(_stop(1, POOL, -100));
         assertEq(reactive.rulesOf(CHAIN, POOL).length, 1);
         assertEq(sys.subCount(), subsBefore);
+    }
+
+    /// @dev Only our executor may create, cancel or settle rules. A look-alike event from any other contract on a
+    ///      served chain (same topics, same data) must be ignored, or anyone could inject or delete rules.
+    function test_ruleEventsFromOtherContracts_areIgnored() public {
+        IReactive.LogRecord memory fake = _stop(1, POOL, -100);
+        fake.contractAddress = address(0xBAD);
+        _react(fake);
+        assertFalse(reactive.mirror(CHAIN, 1).exists, "a stranger's RuleCreated must not be mirrored");
+        assertFalse(_poolSubscribed(POOL));
+
+        _react(_stop(1, POOL, -100)); // the real one
+        IReactive.LogRecord memory fakeCancel = _executorEvent(reactive.RULE_CANCELLED_TOPIC0(), 1);
+        fakeCancel.contractAddress = address(0xBAD);
+        _react(fakeCancel);
+        assertTrue(reactive.mirror(CHAIN, 1).exists, "a stranger's RuleCancelled must not remove the rule");
+    }
+
+    /// @dev Gas stays bounded: at most MAX_RULES_PER_POOL rules per pool are mirrored; the next one is refused
+    ///      with MirrorFull instead of growing the per-swap loop past Lasna's gas cap.
+    function test_mirror_capsRulesPerPool() public {
+        uint256 cap = reactive.MAX_RULES_PER_POOL();
+        for (uint256 id = 1; id <= cap; ++id) _react(_stop(id, POOL, -100));
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, cap);
+
+        vm.expectEmit(true, true, true, false, address(reactive));
+        emit ParallaxReactive.MirrorFull(CHAIN, cap + 1, POOL);
+        _react(_stop(cap + 1, POOL, -100));
+        assertFalse(reactive.mirror(CHAIN, cap + 1).exists);
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, cap);
     }
 
     function test_secondRuleSamePool_noExtraSubscription() public {
@@ -236,6 +268,71 @@ contract ParallaxReactiveTest is Test {
         assertEq(pending, 0);
         _react(_swap(POOL, -150));
         assertEq(sys.callbackCount(), 2);
+    }
+
+    function _skipped(uint256 ruleId, SkipReason reason) internal view returns (IReactive.LogRecord memory r) {
+        r = _executorEvent(reactive.RULE_SKIPPED_TOPIC0(), ruleId);
+        r.data = abi.encode(reason, int24(0), uint256(0));
+    }
+
+    function test_skippedConditionNotMet_rearmsRule() public {
+        _react(_stop(1, POOL, -100));
+        _react(_swap(POOL, -150));
+        _react(_skipped(1, SkipReason.CONDITION_NOT_MET));
+        assertEq(reactive.mirror(CHAIN, 1).pendingSince, 0, "re-armed");
+        _react(_swap(POOL, -150));
+        assertEq(sys.callbackCount(), 2, "fires again on the next crossing swap");
+    }
+
+    /// @dev The debt-pause bug: a reactive contract in debt is not called, so it can miss RuleExecuted /
+    ///      RuleCancelled. The stale mirror then fires a dead rule; the executor answers RuleSkipped(NOT_ACTIVE).
+    ///      Re-arming would repeat that on every swap forever. The mirror must be dropped instead.
+    function test_debtPause_missedExecuted_staleRuleIsDroppedNotRefired() public {
+        _react(_stop(1, POOL, -100));
+        // (RuleExecuted for rule 1 was emitted while we were paused, so it never arrives.)
+        _react(_swap(POOL, -150));
+        assertEq(sys.callbackCount(), 1);
+        _react(_skipped(1, SkipReason.NOT_ACTIVE));
+        assertFalse(reactive.mirror(CHAIN, 1).exists, "stale rule dropped");
+        assertFalse(_poolSubscribed(POOL), "and its pool is no longer paid for");
+        for (uint256 i; i < 5; ++i) {
+            vm.warp(block.timestamp + reactive.PENDING_TIMEOUT() + 1);
+            _react(_swap(POOL, -150));
+        }
+        assertEq(sys.callbackCount(), 1, "the dead rule never fires again");
+    }
+
+    /// @dev The other half: RuleCreated emitted during a pause is never mirrored. The executor's announce()
+    ///      re-emits it; delivering it again is harmless because duplicates are ignored.
+    function test_debtPause_missedCreated_recoveredByReannounce() public {
+        _react(_swap(POOL, -150)); // rule 1 exists on the executor, but we never saw its RuleCreated
+        assertEq(sys.callbackCount(), 0);
+        _react(_stop(1, POOL, -100)); // announce(1) → RuleCreated again
+        _react(_stop(1, POOL, -100)); // announced twice: still one mirror
+        assertEq(reactive.rulesOf(CHAIN, POOL).length, 1);
+        _react(_swap(POOL, -150));
+        assertEq(sys.callbackCount(), 1, "the recovered rule fires");
+    }
+
+    function test_debtPause_missedCancelled_recoveredByRuleSettled() public {
+        _react(_stop(1, POOL, -100));
+        // (RuleCancelled was missed.) Anyone calls resync(1) on the executor → RuleSettled.
+        _react(_executorEvent(reactive.RULE_SETTLED_TOPIC0(), 1));
+        assertFalse(reactive.mirror(CHAIN, 1).exists);
+        assertFalse(_poolSubscribed(POOL));
+        _react(_executorEvent(reactive.RULE_SETTLED_TOPIC0(), 1)); // repeated: harmless
+        _react(_swap(POOL, -150));
+        assertEq(sys.callbackCount(), 0);
+    }
+
+    function test_skipped_malformedData_neverReverts() public {
+        _react(_stop(1, POOL, -100));
+        _react(_swap(POOL, -150));
+        IReactive.LogRecord memory r = _executorEvent(reactive.RULE_SKIPPED_TOPIC0(), 1);
+        r.data = abi.encode(uint256(77)); // not a valid SkipReason
+        _react(r);
+        assertTrue(reactive.mirror(CHAIN, 1).exists, "unknown reason: treated as a normal skip, re-armed");
+        assertEq(reactive.mirror(CHAIN, 1).pendingSince, 0);
     }
 
     function test_pendingTimeout_rearmsByTimestamp() public {

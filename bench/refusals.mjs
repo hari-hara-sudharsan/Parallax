@@ -14,7 +14,7 @@
 //
 // Needs a funded PRIVATE_KEY (Base/Unichain ETH for gas) and a funded ParallaxReactive (~0.3 lREACT).
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, createWalletClient, http, parseAbi, parseUnits, defineChain, parseEventLogs, decodeErrorResult } from "viem";
@@ -52,13 +52,13 @@ const MAX_SQRT = 1461446703485210103287273052203988822378723970342n - 1n;
 
 const executorAbi = parseAbi([
   "struct PoolKey { address currency0; address currency1; uint24 fee; int24 tickSpacing; address hooks; }",
-  "struct Rule { address owner; uint8 ruleType; uint8 status; bool zeroForOne; int24 lowerTick; int24 upperTick; uint16 maxSlippageBps; uint128 amountIn; uint64 createdAt; bytes32 poolId; uint256 positionId; }",
+  "struct Rule { address owner; uint8 ruleType; uint8 status; bool zeroForOne; int24 lowerTick; int24 upperTick; uint16 maxSlippageBps; uint128 amountIn; uint64 createdAt; int24 trailTicks; bool recenter; bytes32 poolId; uint256 positionId; }",
   "function createRule(PoolKey key, uint8 ruleType, bool zeroForOne, int24 lowerTick, int24 upperTick, uint128 amountIn, uint16 maxSlippageBps) returns (uint256)",
   "function cancelRule(uint256 ruleId)",
   "function getRule(uint256 ruleId) view returns (Rule)",
   "function execute(address reactiveSender, uint256 ruleId, int24 observedTick, uint256 originTxHash, uint256 originBlock)",
   "function executions(uint256 ruleId) view returns (uint256 originTxHash, uint64 originBlock, uint64 executedBlock, uint64 executedAt)",
-  "event RuleCreated(uint256 indexed ruleId, address indexed owner, bytes32 indexed poolId, uint8 ruleType, int24 lowerTick, int24 upperTick, bool zeroForOne, uint128 amountIn, uint256 positionId)",
+  "event RuleCreated(uint256 indexed ruleId, address indexed owner, bytes32 indexed poolId, uint8 ruleType, int24 lowerTick, int24 upperTick, bool zeroForOne, uint128 amountIn, uint256 positionId, int24 trailTicks)",
   "event RuleExecuted(uint256 indexed ruleId, address indexed owner, int24 tick, uint256 amount0Out, uint256 amount1Out, uint256 originTxHash, uint256 originBlock, uint256 executedAt)",
   "event RuleSkipped(uint256 indexed ruleId, uint8 reason, int24 tick, uint256 originTxHash)",
   "error NotAuthorized(address sender_, address provider_)",
@@ -102,11 +102,14 @@ const { parallaxExecutor: executor, mockWETH: weth, mockUSDC: usdc, poolId } = d
 const wethIs0 = weth.toLowerCase() < usdc.toLowerCase();
 const key = { currency0: wethIs0 ? weth : usdc, currency1: wethIs0 ? usdc : weth, fee: 3000, tickSpacing: 60,
   hooks: "0x0000000000000000000000000000000000000000" };
-const pub = createPublicClient({ chain: C.chain, transport: http(C.rpc) });
-const wallet = createWalletClient({ account, chain: C.chain, transport: http(C.rpc) });
-const lpub = createPublicClient({ chain: lasna, transport: http() });
+// Public RPCs drop requests now and then: retry each call instead of failing a whole scenario.
+const transport = (url) => http(url, { retryCount: 6, retryDelay: 800, timeout: 20_000 });
+const pub = createPublicClient({ chain: C.chain, transport: transport(C.rpc) });
+const wallet = createWalletClient({ account, chain: C.chain, transport: transport(C.rpc) });
+const lpub = createPublicClient({ chain: lasna, transport: transport(LASNA_RPC) });
 const CID = BigInt(C.chain.id);
 
+const created = []; // every rule this run arms; anything still active is cancelled after each scenario
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const tick = async () => (await pub.readContract({ address: C.stateView, abi: stateViewAbi, functionName: "getSlot0", args: [poolId] }))[1];
 async function until(what, fn) {
@@ -149,7 +152,9 @@ async function armStop() {
   const upper = wethIs0 ? NO_UPPER : t + MOVE_TICKS;
   const rc = await send({ address: executor, abi: executorAbi, functionName: "createRule", args: [key, 0, wethIs0, lower, upper, RULE_WETH, 300] });
   const [ev] = parseEventLogs({ abi: executorAbi, eventName: "RuleCreated", logs: rc.logs });
+  if (!ev) throw new Error("RuleCreated missing from receipt (event ABI out of date?)");
   const ruleId = ev.args.ruleId;
+  created.push(ruleId);
   await until("mirror", async () => (await lpub.readContract({ address: reactive, abi: reactiveAbi, functionName: "mirror", args: [CID, ruleId] })).exists);
   return { ruleId, createTx: rc.transactionHash, tickAtCreate: t, line: wethIs0 ? lower : upper };
 }
@@ -258,7 +263,10 @@ async function dedupe() {
   const s1 = await pub.waitForTransactionReceipt({ hash: h1, pollingInterval: POLL_MS });
   const s2 = await pub.waitForTransactionReceipt({ hash: h2, pollingInterval: POLL_MS });
   const filled = await until("RuleExecuted", async () => (await execEvents("RuleExecuted", r.ruleId, s1.blockNumber))[0]);
-  const reactions2 = await waitReactions(s2.transactionHash, lasnaFrom);
+  // Best effort: the second swap's own reaction can be folded into the same Lasna block, or never arrive if the
+  // rule already filled and the pool was unwatched. The proof is the trigger and execution counts below.
+  let reactions2 = [];
+  try { reactions2 = await Promise.race([waitReactions(s2.transactionHash, lasnaFrom), sleep(40_000).then(() => [])]); } catch { /* optional */ }
   await sleep(8000);
   const triggers = await lasnaEvents("RuleTriggered", r.ruleId, lasnaFrom);
   const execs = await execEvents("RuleExecuted", r.ruleId, s1.blockNumber);
@@ -300,7 +308,10 @@ await ensureTokens();
 for (const name of only) {
   process.stdout.write(`${name} … `);
   try { results[name] = await scenarios[name](); } catch (e) { results[name] = { proven: false, error: String(e?.shortMessage ?? e?.message ?? e).split("\n")[0] }; }
-  console.log(results[name].proven ? "proven" : `NOT proven: ${results[name].error ?? JSON.stringify(results[name])}`);
+  console.log(results[name].proven ? "proven" : `NOT proven: ${results[name].error ?? JSON.stringify(results[name], (_, v) => (typeof v === "bigint" ? v.toString() : v))}`);
+  for (const id of created.splice(0)) {
+    try { await cancelIfActive(id); } catch { /* best effort: never leave a test rule armed */ }
+  }
   writeFileSync(outFile, JSON.stringify({ chain: chainName, chainId: C.chain.id, executor, reactive, ranAt: new Date().toISOString(), results },
     (_, v) => (typeof v === "bigint" ? v.toString() : v), 2));
   await sleep(3000);
@@ -311,12 +322,19 @@ console.log(`wrote ${outFile} and results/REFUSALS.md`);
 function writeReport() {
   const t = (h) => (h ? `[\`${h.slice(0, 10)}…\`](${C.explorer}${h})` : "—");
   const l = (h) => (h ? `[\`${h.slice(0, 10)}…\`](${LASNA_TX}${h})` : "—");
-  const R = results;
+  // Combine runs: for each scenario, the latest proven result (else the latest attempt) from any run on this chain.
+  const R = {};
+  const runs = readdirSync(outDir).filter((f) => f.startsWith(`refusals-${chainName}-`) && f.endsWith(".json")).sort();
+  for (const f of runs) {
+    for (const [k, v] of Object.entries(JSON.parse(readFileSync(join(outDir, f), "utf8")).results ?? {})) {
+      if (v.proven || !R[k]?.proven) R[k] = v;
+    }
+  }
   const rows = [
     ["Direct `execute()` from an outsider reverts", R.unauthorized, (x) => `${t(x.tx)} · ${x.status} (\`${x.reason}\`)`],
     ["Swap that stops short of the line: no callback", R.inBand, (x) => `swap ${t(x.originTx)} (tick ${x.tickBefore} → ${x.tickAfter}, line ${x.line}) · Lasna ${l(x.reactiveTx)} requested ${x.callbackRequested ? "a callback ✗" : "**no callback**"} · rule still ${x.ruleStatus}`],
     ["Stale trigger: re-checked, skipped, re-armed, then filled", R.stale, (x) => `cross ${t(x.crossTx)} → snap-back ${t(x.snapBackTx)} → Lasna ${l(x.reactiveTx)} → **skipped** ${t(x.skippedTx)} (CONDITION_NOT_MET at tick ${x.skipTick}) → re-armed ${l(x.rearmTx)} → cross ${t(x.crossAgainTx)} → Lasna ${l(x.reactiveTx2)} → **filled** ${t(x.filledTx)}`],
-    ["Two crossing swaps: one callback, one execution", R.dedupe, (x) => `swaps ${t(x.swap1Tx)} + ${t(x.swap2Tx)} · Lasna ${l(x.reactiveTx)} · second swap's reaction ${l(x.secondReactiveTx)} requested ${x.secondRequestedCallback ? "a callback" : "none"} · triggers ${x.triggers}, executions ${x.executions} · ${t(x.filledTx)}`],
+    ["Two crossing swaps: one callback, one execution", R.dedupe, (x) => `swaps ${t(x.swap1Tx)} + ${t(x.swap2Tx)} · Lasna ${l(x.reactiveTx)} · ${x.secondReactiveTx ? `second swap's reaction ${l(x.secondReactiveTx)} requested ${x.secondRequestedCallback ? "a callback" : "none"} · ` : ""}triggers ${x.triggers}, executions ${x.executions} · ${t(x.filledTx)}`],
     ["Cancelled rule is unmirrored and never fires", R.cancelled, (x) => `cancel ${t(x.cancelTx)} · Lasna unmirror ${l(x.removedTx)} · crossing swap ${t(x.crossTx)} · triggers ${x.triggers}, executions ${x.executions}`],
   ].filter(([, x]) => x);
   const md = [

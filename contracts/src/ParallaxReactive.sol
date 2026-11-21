@@ -6,7 +6,7 @@ import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {ISystemContract} from "reactive-lib-omni/interfaces/ISystemContract.sol";
 
 import {IParallaxExecutor} from "./interfaces/IParallaxExecutor.sol";
-import {RuleType} from "./libraries/RuleTypes.sol";
+import {RuleType, SkipReason} from "./libraries/RuleTypes.sol";
 
 /// @title ParallaxReactive
 /// @notice Reactive-Network half of Parallax (deployed on Lasna). ONE contract guards rules on SEVERAL
@@ -60,6 +60,7 @@ contract ParallaxReactive is AbstractReactive {
         uint256(keccak256("RuleExecuted(uint256,address,int24,uint256,uint256,uint256,uint256,uint256)"));
     uint256 public constant RULE_SKIPPED_TOPIC0 = uint256(keccak256("RuleSkipped(uint256,uint8,int24,uint256)"));
     uint256 public constant RULE_UPDATED_TOPIC0 = uint256(keccak256("RuleUpdated(uint256,int24,int24)"));
+    uint256 public constant RULE_SETTLED_TOPIC0 = uint256(keccak256("RuleSettled(uint256,uint8)"));
 
     /// @notice Gas limit for `execute` callbacks. Measured: swap ≈ 220k, LP withdraw ≈ 300k, LP re-centre ≈ 900k.
     /// @dev The Callback Proxy keeps ~130k of the limit for its own accounting (`_extraGas` + `_maxChargeGas`),
@@ -134,10 +135,15 @@ contract ParallaxReactive is AbstractReactive {
         chains[chainId] = ChainConfig(poolManager, executor);
         chainIds.push(chainId);
 
-        uint256[5] memory topics = [
-            RULE_CREATED_TOPIC0, RULE_CANCELLED_TOPIC0, RULE_EXECUTED_TOPIC0, RULE_SKIPPED_TOPIC0, RULE_UPDATED_TOPIC0
+        uint256[6] memory topics = [
+            RULE_CREATED_TOPIC0,
+            RULE_CANCELLED_TOPIC0,
+            RULE_EXECUTED_TOPIC0,
+            RULE_SKIPPED_TOPIC0,
+            RULE_UPDATED_TOPIC0,
+            RULE_SETTLED_TOPIC0
         ];
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 6; ++i) {
             SYSTEM.subscribe(chainId, executor, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
         }
         emit ChainAdded(chainId, poolManager, executor);
@@ -171,10 +177,16 @@ contract ParallaxReactive is AbstractReactive {
         uint256 t0 = log_.topic0;
         if (t0 == RULE_CREATED_TOPIC0 && log_.opCode == 4) {
             _onRuleCreated(log_);
-        } else if (t0 == RULE_EXECUTED_TOPIC0 || t0 == RULE_CANCELLED_TOPIC0) {
+        } else if (t0 == RULE_EXECUTED_TOPIC0 || t0 == RULE_CANCELLED_TOPIC0 || t0 == RULE_SETTLED_TOPIC0) {
             _removeRule(log_.chainId, log_.topic1);
         } else if (t0 == RULE_SKIPPED_TOPIC0) {
-            _rearm(log_.chainId, log_.topic1);
+            // data = (SkipReason reason, int24 tick, uint256 originTxHash). NOT_ACTIVE means the executor already
+            // executed or cancelled the rule, so the mirror is stale (e.g. we missed RuleExecuted while paused for
+            // debt): drop it. Re-arming would fire the dead rule again on every swap and burn lREACT forever.
+            // Decoded as uint256, not as the enum, so malformed data can never make react() revert (reverts are billed).
+            uint256 reason = log_.data.length >= 32 ? abi.decode(log_.data, (uint256)) : type(uint256).max;
+            if (reason == uint256(SkipReason.NOT_ACTIVE)) _removeRule(log_.chainId, log_.topic1);
+            else _rearm(log_.chainId, log_.topic1);
         } else if (t0 == RULE_UPDATED_TOPIC0) {
             _onRuleUpdated(log_);
         }

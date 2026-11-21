@@ -1,0 +1,32 @@
+{
+  "chain": "base",
+  "chainId": 84532,
+  "executor": "0x2f772766ec926359093FA2d478FBDdcd828304Ff",
+  "reactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
+  "ranAt": "2026-11-21T06:21:48.123Z",
+  "results": {
+    "unauthorized": {
+      "claim": "Only the Callback Proxy, carrying our reactive contract, can call execute()",
+      "tx": "0xdeccdac6156c47cdeb056dd2581d3f5804b95cc4f6c6c147010acd87a18f50a2",
+      "status": "reverted",
+      "reason": "NotAuthorized(0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3, 0x476F44b11F5C942c58f4c8E3d0300E5710743585)",
+      "proven": true
+    },
+    "inBand": {
+      "proven": false,
+      "error": "Cannot read properties of undefined (reading 'args')"
+    },
+    "stale": {
+      "proven": false,
+      "error": "Cannot read properties of undefined (reading 'args')"
+    },
+    "dedupe": {
+      "proven": false,
+      "error": "Cannot read properties of undefined (reading 'args')"
+    },
+    "cancelled": {
+      "proven": false,
+      "error": "Cannot read properties of undefined (reading 'args')"
+    }
+  }
+}

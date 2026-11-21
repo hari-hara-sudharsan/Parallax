@@ -1,0 +1,41 @@
+{
+  "chain": "base",
+  "chainId": 84532,
+  "executor": "0x2f772766ec926359093FA2d478FBDdcd828304Ff",
+  "reactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
+  "ranAt": "2026-11-21T08:47:20.402Z",
+  "results": {
+    "stale": {
+      "claim": "A stale trigger is re-checked on-chain, skipped, re-armed, and fills on the next real cross",
+      "ruleId": 10,
+      "line": 200867,
+      "createTx": "0xda45d4aa2674ea3ecbfb3594fc08226ab5b9d000f8fcb628374fcb2048f28797",
+      "crossTx": "0x9dc59d18a891929f050fddc81dd85bdfc3ab4cbaf641a60656a12c659f81494c",
+      "snapBackTx": "0x7087bc4f1aac23b9c9d4a07e9ce434c8a00454d50324ea921bacb9363485f276",
+      "reactiveTx": "0x3e7e572fd23e06c59fb3cb070210cd257d5a01502a65d79741047de1a0db73e8",
+      "skippedTx": "0xadd77e13e0a54f4880a0c59d17e3c17266ca235b5b8e4ae99fac9341dd4058a4",
+      "skipReason": 1,
+      "skipTick": 200817,
+      "rearmTx": "0x33778548cc8288201e761d8e6d2f8eea0f3dd270324e9c81151a4abe765fe32b",
+      "crossAgainTx": "0x948237623a3e49d2581d400b11f09b960f57477c409edeb3eadde026019f3e9b",
+      "reactiveTx2": "0xfbf8553c8073072db595f3c0bb8a7e33d28bd78aac38cc951c91b9da83f82833",
+      "filledTx": "0x6e56f8036fd610ca6772e1e42c23ae6e3885575b544f6095fde12311c8d146e4",
+      "proven": true
+    },
+    "dedupe": {
+      "proven": false,
+      "error": "timeout waiting for reactive tx"
+    },
+    "cancelled": {
+      "claim": "A cancelled rule is unmirrored on Lasna and never fires",
+      "ruleId": 12,
+      "createTx": "0x88d8b947a6552a084da5e8b5280eac8d62d9e7c754f8f73e062d132703ab9698",
+      "cancelTx": "0xff061d33763ecd4d7555ae5c56ab7e6a48037e57cef8e2ba9cae81215f7aaa5e",
+      "removedTx": "0xc62effb0ff1c58799b1f114f55ab2360346ef10a285d99ede2b33cf4ce761b89",
+      "crossTx": "0x11ed0ffe304a816ab964c5d9c67e81a33794ef532030f90f3aa477f9aad3a416",
+      "triggers": 0,
+      "executions": 0,
+      "proven": true
+    }
+  }
+}

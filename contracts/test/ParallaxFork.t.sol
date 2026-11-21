@@ -378,6 +378,43 @@ contract ParallaxForkTest is Test {
         _callbackFromProxy(id);
     }
 
+    /// @dev A line is inclusive: a stop exactly at the current tick has already been hit. The executor must treat
+    ///      `tick == bound` as triggered, both when arming (reject) and when re-checking (execute).
+    function test_trigger_boundIsInclusive() public {
+        int24 t = _tick();
+        bool z = wethIs0;
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.TriggerAlreadyHit.selector, t));
+        executor.createRule(key, RuleType.STOP_LOSS, z, t, NO_UPPER, 1 ether, 100);
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.TriggerAlreadyHit.selector, t));
+        executor.createRule(key, RuleType.TAKE_PROFIT, z, NO_LOWER, t, 1 ether, 100);
+        // One tick away is not yet hit.
+        uint256 id = executor.createRule(key, RuleType.STOP_LOSS, z, t - 1, NO_UPPER, 1 ether, 100);
+        vm.stopPrank();
+        assertFalse(executor.isTriggered(id));
+    }
+
+    /// @dev After a debt pause, anyone can re-announce a rule so the reactive mirror catches up.
+    function test_resync_reannouncesActiveAndSettledRules() public {
+        uint256 id = _createStopLoss(1 ether, 100);
+        Rule memory r = executor.getRule(id);
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit IParallaxExecutor.RuleCreated(
+            id, alice, r.poolId, r.ruleType, r.lowerTick, r.upperTick, r.zeroForOne, r.amountIn, r.positionId, r.trailTicks
+        );
+        vm.prank(address(0xCAFE)); // permissionless
+        executor.resync(id);
+
+        vm.prank(alice);
+        executor.cancelRule(id);
+        vm.expectEmit(true, false, false, true, address(executor));
+        emit IParallaxExecutor.RuleSettled(id, RuleStatus.CANCELLED);
+        executor.resync(id);
+
+        vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.RuleNotActive.selector, 999));
+        executor.resync(999);
+    }
+
     function test_unlockCallback_onlyPoolManager() public {
         vm.expectRevert(V4LiquidityOps.NotPoolManager.selector);
         executor.unlockCallback("");

@@ -106,7 +106,9 @@ Every live contract is verified with an **exact match** (creation and runtime by
 | mWETH / mUSDC | Unichain Sepolia 1301 | [mWETH](https://repo.sourcify.dev/1301/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) · [mUSDC](https://repo.sourcify.dev/1301/0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c) |
 
 Both executors were deployed from commit `2cf2e9e`, before the vault refactor moved the liquidity helpers into
-`src/base/V4LiquidityOps.sol`, so they verify from that commit, not from `main`. Everything else verifies from `main`.
+`src/base/V4LiquidityOps.sol`, so they verify from that commit. The other live contracts verify from commit `ff562d8`.
+`main` has since gained the v5 debt-pause fixes (`resync`, `RuleSettled`, NOT_ACTIVE handling), which are not deployed
+yet; they will be verified again after the v5 deploy.
 To re-check one: `forge verify-contract --verifier sourcify --chain <id> <address> <path>:<Name> --constructor-args <hex>`
 (constructor arguments are in `contracts/broadcast/<script>/<chainId>/run-latest.json`).
 

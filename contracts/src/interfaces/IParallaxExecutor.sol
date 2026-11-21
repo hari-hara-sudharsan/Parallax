@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
 
-import {RuleType, SkipReason} from "../libraries/RuleTypes.sol";
+import {RuleType, RuleStatus, SkipReason} from "../libraries/RuleTypes.sol";
 
 /// @title IParallaxExecutor
 /// @notice Events + callback entrypoint of the destination contract.
@@ -37,6 +37,10 @@ interface IParallaxExecutor {
     /// @notice The owner cancelled the rule and got the deposit / position back.
     event RuleCancelled(uint256 indexed ruleId, address indexed owner);
 
+    /// @notice Re-announces that a rule is settled (executed or cancelled), so a reactive mirror that missed the
+    ///         original event can drop it. Emitted only by `resync`.
+    event RuleSettled(uint256 indexed ruleId, RuleStatus status);
+
     /// @notice The rule fired and its action completed.
     /// @param tick Pool tick after execution (re-read on-chain, never trusted from the callback).
     /// @param amount0Out currency0 sent to the owner (swap proceeds or refund, or withdrawn liquidity).
@@ -57,7 +61,8 @@ interface IParallaxExecutor {
         uint256 executedAt
     );
 
-    /// @notice A callback arrived but did not execute (see SkipReason). Non-final: the reactive side re-arms.
+    /// @notice A callback arrived but did not execute (see SkipReason). The reactive side re-arms the rule, except
+    ///         for NOT_ACTIVE, which means the rule is already settled, so the reactive side drops its mirror.
     event RuleSkipped(uint256 indexed ruleId, SkipReason reason, int24 tick, uint256 originTxHash);
 
     /// @notice Callback entrypoint, called by the Reactive Callback Proxy.

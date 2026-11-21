@@ -83,6 +83,12 @@ stops · zero-setup judge tryout · on-chain refusal proofs · Sourcify + CI + c
 
 **Gate:** all mutants caught, coverage published, CI green.
 
+**Status (2026-11-21):** invariant suite (`ParallaxReactive.invariant.t.sol`: random order, late, duplicated, lost
+callbacks, lost logs, time jumps; converges after `resync`). The first mutation pass killed 22 of 25 mutants, and the
+3 gaps got new tests. Fuzzing found the debt-pause bug (a missed `RuleExecuted` made a dead rule refire forever; a missed
+`RuleCreated` never fired), fixed in `main` with `resync` + `RuleSettled` + NOT_ACTIVE removal, shipping with v5.
+103 tests. Pulled forward from Phase D: the debt-pause fix.
+
 ## Phase D — v5 contracts (Nov 26–29) · ONE redeploy
 
 All contract changes land together, so we redeploy and re-benchmark once.

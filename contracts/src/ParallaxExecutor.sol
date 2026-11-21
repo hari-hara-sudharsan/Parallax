@@ -338,6 +338,18 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
         _coverDebt();
     }
 
+    /// @notice Re-announce a rule's current state so the reactive mirror can catch up.
+    /// @dev A reactive contract in debt is not called at all, so events emitted while it was paused are lost:
+    ///      a missed RuleCreated means the rule never fires, and a missed RuleExecuted / RuleCancelled leaves a
+    ///      stale mirror. After the debt is paid anyone can call this: an active rule re-emits RuleCreated (with its
+    ///      current bounds), a settled one emits RuleSettled. The reactive side ignores repeats, so it is harmless.
+    function resync(uint256 ruleId) external {
+        Rule storage r = rules[ruleId];
+        if (r.status == RuleStatus.NONE) revert RuleNotActive(ruleId);
+        if (r.status == RuleStatus.ACTIVE) _emitCreated(ruleId, r);
+        else emit RuleSettled(ruleId, r.status);
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  Views
     // ════════════════════════════════════════════════════════════════════════

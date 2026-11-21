@@ -1,0 +1,34 @@
+{
+  "chain": "base",
+  "chainId": 84532,
+  "executor": "0x2f772766ec926359093FA2d478FBDdcd828304Ff",
+  "reactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
+  "ranAt": "2026-11-21T06:34:47.924Z",
+  "results": {
+    "unauthorized": {
+      "claim": "Only the Callback Proxy, carrying our reactive contract, can call execute()",
+      "tx": "0xb79674f3c1ab94b9629a62f9de4af6c6bb2340387526222748fb8119ef73d212",
+      "status": "reverted",
+      "reason": "NotAuthorized(0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3, 0x476F44b11F5C942c58f4c8E3d0300E5710743585)",
+      "proven": true
+    },
+    "inBand": {
+      "claim": "A swap that does not reach the line is seen on Lasna but requests no callback",
+      "ruleId": 7,
+      "line": 200777,
+      "tickBefore": 200727,
+      "tickAfter": 200734,
+      "createTx": "0xc007d0a61806b531dde2179e4b3186dd7719903802f5be86fa862bd9a37be8d2",
+      "originTx": "0x5e7297c818b8c020b92e13ed8930555a391199d6c6c0486c97d14929ec2eadae",
+      "reactiveTx": "0x25ef285ac7eec0dfca630e2f661e9d64b6e426eba6a0a8f65a42d6110c57390e",
+      "callbackRequested": false,
+      "executions": 0,
+      "ruleStatus": "ACTIVE",
+      "proven": true
+    },
+    "stale": {
+      "proven": false,
+      "error": "RPC Request failed."
+    }
+  }
+}

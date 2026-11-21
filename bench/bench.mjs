@@ -64,13 +64,13 @@ const MAX_SQRT = 1461446703485210103287273052203988822378723970342n - 1n;
 // ── ABIs (human-readable, matching contracts/src) ─────────────────────────
 const executorAbi = parseAbi([
   "struct PoolKey { address currency0; address currency1; uint24 fee; int24 tickSpacing; address hooks; }",
-  "struct Rule { address owner; uint8 ruleType; uint8 status; bool zeroForOne; int24 lowerTick; int24 upperTick; uint16 maxSlippageBps; uint128 amountIn; uint64 createdAt; bytes32 poolId; uint256 positionId; }",
+  "struct Rule { address owner; uint8 ruleType; uint8 status; bool zeroForOne; int24 lowerTick; int24 upperTick; uint16 maxSlippageBps; uint128 amountIn; uint64 createdAt; int24 trailTicks; bool recenter; bytes32 poolId; uint256 positionId; }",
   "function createRule(PoolKey key, uint8 ruleType, bool zeroForOne, int24 lowerTick, int24 upperTick, uint128 amountIn, uint16 maxSlippageBps) returns (uint256)",
   "function cancelRule(uint256 ruleId)",
   "function getRule(uint256 ruleId) view returns (Rule)",
   "function nextRuleId() view returns (uint256)",
   "function executions(uint256 ruleId) view returns (uint256 originTxHash, uint64 originBlock, uint64 executedBlock, uint64 executedAt)",
-  "event RuleCreated(uint256 indexed ruleId, address indexed owner, bytes32 indexed poolId, uint8 ruleType, int24 lowerTick, int24 upperTick, bool zeroForOne, uint128 amountIn, uint256 positionId)",
+  "event RuleCreated(uint256 indexed ruleId, address indexed owner, bytes32 indexed poolId, uint8 ruleType, int24 lowerTick, int24 upperTick, bool zeroForOne, uint128 amountIn, uint256 positionId, int24 trailTicks)",
   "event RuleExecuted(uint256 indexed ruleId, address indexed owner, int24 tick, uint256 amount0Out, uint256 amount1Out, uint256 originTxHash, uint256 originBlock, uint256 executedAt)",
   "event RuleSkipped(uint256 indexed ruleId, uint8 reason, int24 tick, uint256 originTxHash)",
 ]);
