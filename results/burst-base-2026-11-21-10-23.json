@@ -1,0 +1,69 @@
+{
+  "chain": "base",
+  "ranAt": "2026-11-21T10:23:22.075Z",
+  "executor": "0x98f96fd0b1cb9B723157D3686446004EcA066982",
+  "reactive": "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3",
+  "cap": 3,
+  "rules": [
+    115,
+    116,
+    117,
+    118,
+    119
+  ],
+  "swap1": "0xddc39ddb04fb1959f2f5d4c8e63b941f7399403137020b28682a0b4a7f146501",
+  "batch1": {
+    "fired": 3,
+    "rules": [
+      115,
+      116,
+      117
+    ],
+    "reactiveTx": "0x94b28d0224aa84e89e7fa4352c240fb24d77765a0579b7c9abe9873842bc244b"
+  },
+  "swap2": "0xf49e7808d96c25b73a8d41a460f710fc4fa463a4e6c9dff4c15bd57d9f463fc5",
+  "batch2": {
+    "fired": 2,
+    "rules": [
+      118,
+      119
+    ],
+    "reactiveTx": "0xef7b5afd0691c5607d109320721f24dd01b8aa6f3b1ddbd41683aacc59f63a6a",
+    "origins": [
+      "0xfeff0eb14465f818aad0efc41388971d80752e8349c05f1b502e8354e60b5d66"
+    ]
+  },
+  "executions": [
+    {
+      "ruleId": 115,
+      "originBlock": 61673602,
+      "executedBlock": 61673609,
+      "latencyBlocks": 7
+    },
+    {
+      "ruleId": 116,
+      "originBlock": 61673602,
+      "executedBlock": 61673611,
+      "latencyBlocks": 9
+    },
+    {
+      "ruleId": 117,
+      "originBlock": 61673602,
+      "executedBlock": 61673614,
+      "latencyBlocks": 12
+    },
+    {
+      "ruleId": 118,
+      "originBlock": 61673609,
+      "executedBlock": 61673619,
+      "latencyBlocks": 10
+    },
+    {
+      "ruleId": 119,
+      "originBlock": 61673609,
+      "executedBlock": 61673622,
+      "latencyBlocks": 13
+    }
+  ],
+  "ok": true
+}
