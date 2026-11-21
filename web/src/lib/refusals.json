@@ -1,0 +1,73 @@
+{
+  "base": {
+    "unauthorized": {
+      "claim": "Only the Callback Proxy, carrying our reactive contract, can call execute()",
+      "tx": "0x989caf3ec18456e4d9ff9354d7a1cb088c1c2b0c787d6560e919265259bf5810",
+      "status": "reverted",
+      "reason": "NotAuthorized(0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3, 0x476F44b11F5C942c58f4c8E3d0300E5710743585)",
+      "proven": true,
+      "ranAt": "2026-11-21T10:07:57.276Z"
+    },
+    "inBand": {
+      "claim": "A swap that does not reach the line is seen on Lasna but requests no callback",
+      "ruleId": 103,
+      "line": 198198,
+      "tickBefore": 198148,
+      "tickAfter": 198159,
+      "createTx": "0x0fc2725d1b64365e25136a122a8f72d0375af517cff5cfe5056222ea795f1a87",
+      "originTx": "0xdbde1d8999ca1607668fabf3ad6a9d94b06e214004bc3c0e130b7c353c5261ac",
+      "reactiveTx": "0xdb7c62acf28a44f6ff9cc4df19ae781b9362b3f540961933d0f455809fc785dc",
+      "callbackRequested": false,
+      "executions": 0,
+      "ruleStatus": "ACTIVE",
+      "proven": true,
+      "ranAt": "2026-11-21T10:07:57.276Z"
+    },
+    "stale": {
+      "claim": "A stale trigger is re-checked on-chain, skipped, re-armed, and fills on the next real cross",
+      "ruleId": 108,
+      "line": 198439,
+      "createTx": "0x5b8ef09de2ba438c6554be1947874cfb0512a4d494e5a4b8409e1693a1838818",
+      "crossTx": "0x0e59a94ab13d06e85920171ed0ad8f7216dfcdfcd3be057605a9bc7aff6764db",
+      "snapBackTx": "0x713b6b03def981d12c436cdcb330385f089c56408e2b556ebe5b818677c9f03d",
+      "reactiveTx": "0xcbc7e32a95513cbe6db3714081bda6fb25f655c5df36611f3064f575cf19cc4f",
+      "skippedTx": "0x090de1df08d0481285147c32b842c2cb0ce041af95fedfdf56689e2172730883",
+      "skipReason": 1,
+      "skipTick": 198388,
+      "rearmTx": "0x8787c12c8caf24b4e9d9c2b1b400290add92c55d6549008565e79ccdf701b2f3",
+      "crossAgainTx": "0xfa301d40a85858a532e808fdc430a8e928cc0afae06294df29a5116bccdcb6f6",
+      "reactiveTx2": "0xbca7db9a513b610c9ef54db2ddd52e1d232b24df08a484f4bdf53cb7c4826da8",
+      "filledTx": "0xbc082c632c60b38eb04ed9771df7321f22344b1c8ea52c0b3a22274af9673853",
+      "proven": true,
+      "ranAt": "2026-11-21T10:10:33.385Z"
+    },
+    "dedupe": {
+      "claim": "Two crossing swaps in a row produce exactly one callback and one execution",
+      "ruleId": 105,
+      "createTx": "0x3c6766b09263f5662b2a4ca6688dfced62c9d45a40a5dc024c2fbc08a8ca73c6",
+      "swap1Tx": "0xe98ba5245855b66f3a493adbaa845918a4db906d7ffd66ca2ce083454edc8785",
+      "swap2Tx": "0x7fe721199b84388b4cca42397789aed6b42b50aedf51cee4bd5e459125c64e3a",
+      "reactiveTx": "0xca063ff08e004deb6288a332542c5842a151c201da6c824041dff26df1694f06",
+      "secondReactiveTx": "0xbabcde675186a4aa6950b144b07953464e47b9a991771ba983ec2a6e96771213",
+      "secondRequestedCallback": false,
+      "triggers": 1,
+      "executions": 1,
+      "skips": 0,
+      "filledTx": "0x47cecb5b71ecebfdf5049928816b56912ce00ef657f0604728e17fc2424489e7",
+      "proven": true,
+      "ranAt": "2026-11-21T10:07:57.276Z"
+    },
+    "cancelled": {
+      "claim": "A cancelled rule is unmirrored on Lasna and never fires",
+      "ruleId": 106,
+      "createTx": "0xb69b65250045c7324a7c8c7d9ae5dbd27f99641eba2579f2cf52b837831b3ef3",
+      "cancelTx": "0x136ea96d34b797459d376efaab86b049b7fbb6be7c11d25f0a8376c618c2f8cf",
+      "removedTx": "0x2046153161282e6abf8e61d9d65a7a49a3f78d6ab8c2bf04fbe882f9aebe8bbe",
+      "crossTx": "0x683204c7a2762dd0a5e517a7d7c771dd037e6763dc3fbfb86df13764bc6b1e39",
+      "triggers": 0,
+      "executions": 0,
+      "proven": true,
+      "ranAt": "2026-11-21T10:07:57.276Z"
+    }
+  }
+}

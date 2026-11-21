@@ -6,6 +6,7 @@ export {
   mockErc20Abi,
   parallaxVaultAbi,
   parallaxVaultReactiveAbi,
+  parallaxTryoutAbi,
 } from "./generated/abis";
 
 /** Uniswap v4 StateView (lens over PoolManager storage). */

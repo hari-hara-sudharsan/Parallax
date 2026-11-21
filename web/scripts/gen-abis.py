@@ -17,6 +17,7 @@ targets = {
     "mockErc20Abi": "MockERC20.sol/MockERC20.json",
     "parallaxVaultAbi": "ParallaxVault.sol/ParallaxVault.json",
     "parallaxVaultReactiveAbi": "ParallaxVaultReactive.sol/ParallaxVaultReactive.json",
+    "parallaxTryoutAbi": "ParallaxTryout.sol/ParallaxTryout.json",
 }
 
 lines = ["// AUTO-GENERATED from Foundry artifacts by `./tw.sh abis`. Do not edit by hand.", ""]

@@ -2,6 +2,10 @@
 
 import { CreateRule } from "@/components/CreateRule";
 import { DemoPanel } from "@/components/DemoPanel";
+import { HealthPanel } from "@/components/HealthPanel";
+import { PanicPanel } from "@/components/PanicPanel";
+import { RefusalRoom } from "@/components/RefusalRoom";
+import { TryoutPanel } from "@/components/TryoutPanel";
 import { LoopStrip } from "@/components/GuardsOverview";
 import { LiveFeed } from "@/components/LiveFeed";
 import { MyRules } from "@/components/MyRules";
@@ -29,11 +33,14 @@ export default function App() {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
             <div className="grid min-w-0 grid-cols-1 content-start gap-8 lg:col-span-5">
               <DemoPanel />
+              <TryoutPanel />
               <LiveFeed />
             </div>
             <div className="grid min-w-0 grid-cols-1 content-start gap-8 lg:col-span-7">
               <CreateRule />
               <LoopStrip />
+              <PanicPanel />
+              <HealthPanel />
             </div>
           </div>
           <YourRules />
@@ -59,6 +66,9 @@ export default function App() {
             sub="Every loop Parallax has run on testnet, with its three transactions and block-exact latency, stored in the app so it outlives Lasna’s block pruning."
           />
           <ProofView />
+          <div className="mt-8">
+            <RefusalRoom />
+          </div>
         </div>
       )}
 
