@@ -1,0 +1,16 @@
+{
+  "chain": "base",
+  "chainId": 84532,
+  "executor": "0x2f772766ec926359093FA2d478FBDdcd828304Ff",
+  "reactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
+  "ranAt": "2026-11-21T05:57:49.627Z",
+  "results": {
+    "unauthorized": {
+      "claim": "Only the Callback Proxy, carrying our reactive contract, can call execute()",
+      "tx": "0x11e394fdad791059b96a789f19e2cbde222cbe8aff7c48ee61b5770c4ac0d7d8",
+      "status": "reverted",
+      "reason": "The contract function \"execute\" reverted.",
+      "proven": true
+    }
+  }
+}

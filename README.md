@@ -35,6 +35,26 @@ You don't have to trust this README. Pick any row of [`results/SUMMARY.md`](resu
 
 The latency figures come from that on-chain record, not from our stopwatch.
 
+Or check from a terminal, read-only, no wallet or key (needs Foundry's `cast`):
+
+```bash
+RPC=https://sepolia.base.org; EXEC=0x2f772766ec926359093FA2d478FBDdcd828304Ff
+# 1. The executor's own record of rule 1 (the live trailing stop): origin tx, origin block 59074364,
+#    executed block 59074376 (12 blocks later), executed timestamp
+cast call --rpc-url $RPC $EXEC "executions(uint256)(uint256,uint64,uint64,uint64)" 1
+# 2. Nobody but Reactive can fire a rule: a direct call reverts with NotAuthorized(you, callbackProxy)
+cast call --rpc-url $RPC --from 0x000000000000000000000000000000000000dEaD $EXEC \
+  "execute(address,uint256,int24,uint256,uint256)" 0x000000000000000000000000000000000000dEaD 1 0 0 0
+# 3. The reactive contract on Lasna is funded and has no debt (debt > 0 pauses it)
+cast call --rpc-url https://lasna-rpc.rnk.dev/ 0x8888888888888888888888888888888888888888 \
+  "debt(address)(uint256)" 0xDf554201dec784F0541FA5fc884240c73113e334
+# 4. Every transaction linked in these docs exists on its chain
+node bench/check-links.mjs
+```
+
+Every claim in this README is mapped to its proof (transaction, test or command) in [`docs/CLAIMS.md`](docs/CLAIMS.md).
+What Parallax refuses to do, shown as real transactions: [`results/REFUSALS.md`](results/REFUSALS.md).
+
 ---
 
 ## 1. The problem
@@ -65,6 +85,22 @@ Swap on Base ──▶ react() on Lasna ──▶ callback executes on Base
 
 With this speed, keeperless protection beats a well-run bot instead of trailing it. And there is nothing for the user
 to keep online: no machine, no RPC subscription and no hot key holding funds.
+
+**What a second is worth.** We replayed the worst 30 minutes of the 10 October 2025 crash (ETH −13.9%, Binance
+1-second candles, checksum-verified) and asked how far the price fell while a triggered stop waited to fill:
+
+| Fill latency | Loss at the p95 second | vs Parallax, per $100k |
+|---|---|---|
+| **1.4 s: Parallax (measured)** | **25.4 bps** | — |
+| 2.0 s: keeper bot (measured) | 33.5 bps | $81 more |
+| 4.4 s: legacy Reactive (derived) | 58.0 bps | $325 more |
+| 7.4 s: legacy Reactive, worst case (derived) | 77.2 bps | $517 more |
+
+On an average second the differences are small, because falls and bounces cancel. A stop exists for the bad seconds,
+and there Omni's speed is worth hundreds of dollars per $100k. Method and both populations:
+[`results/what-a-second-buys.md`](results/what-a-second-buys.md) (`python analysis/what_a_second_buys.py`).
+The derived legacy rows add half a block (+3 s) and one block (+6 s) of a ~7 s chain to our measured loop; nothing was
+run on legacy Reactive.
 
 ## 3. What it does
 
@@ -248,7 +284,8 @@ cd web && npm install && npm run dev   # dashboard on http://localhost:3000
 - **No pure cross-chain signal** (Base price → act on Unichain), by design: an executor can't re-validate a remote
   price, so each executor acts only on its own chain's pool. One reactive contract still serves both chains.
 - **Funding is real.** The reactive contract pays lREACT per reactive tx and each executor pays ETH per callback. Any
-  debt pauses service, which is how Reactive Network is designed.
+  debt pauses service, which is how Reactive Network is designed. Measured: ≈ 0.020 lREACT per reactive tx, ≈ 0.06 lREACT
+  per full loop, a negligible amount of ETH per callback ([`results/costs.md`](results/costs.md)).
 - **Vault deposits use the spot price.** A deposit is valued at the pool's current price, so a deposit sandwiched by
   two swaps could mint extra shares. A time-weighted reference is planned (see the Slither triage).
 - **Vault scope:** one pool, one range width and fixed tuning (±3%, a 2% breaker, 60 s). A fast round trip can leave it

@@ -33,12 +33,18 @@ export function writeSummary(dir) {
     "- **Seconds (blocks)** = blocks × the chain's nominal block time (Base 200 ms, Unichain 1 s).",
     "- **Wall-clock** is measured by polling public RPCs from our machine, so it is an upper bound.",
     "- Failures are kept, with their reason.",
+    "- Percentiles are **nearest-rank** (every printed value is a latency that actually occurred). p99 is printed only",
+    "  with at least 100 filled rounds; below that it would just be the maximum.",
+    "- Lasna and the origin chain have separate clocks, so cross-chain timestamp legs can be off by about a second.",
+    "  The headline figure uses only the origin chain's own blocks, so the clocks cancel.",
     "",
     "## Summary",
     "",
-    "| Chain | Rounds | Filled | Blocks p50 / p90 / min / max | Seconds by blocks p50 / p90 | Seconds by timestamp p50 / p90 | Wall-clock p50 |",
+    "| Chain | Rounds | Filled | Blocks p50 / p90 / p99 / min / max | Seconds by blocks p50 / p90 | Seconds by timestamp p50 / p90 | Wall-clock p50 |",
     "|---|---|---|---|---|---|---|",
   ];
+  const p99 = (xs) => (xs.length >= 100 ? pct(xs, 99) : `n<100`);
+  const derived = [];
   for (const chain of ["base", "unichain"]) {
     const rs = rows.filter((r) => r.chain === chain);
     if (!rs.length) continue;
@@ -50,9 +56,31 @@ export function writeSummary(dir) {
     const f = (x, d = 1) => (x === undefined ? "–" : Number(x).toFixed(d));
     lines.push(
       `| ${chain === "base" ? "Base Sepolia" : "Unichain Sepolia"} | ${rs.length} | ${ok.length}/${rs.length} | ` +
-        `${pct(b, 50) ?? "–"} / ${pct(b, 90) ?? "–"} / ${b.length ? Math.min(...b) : "–"} / ${b.length ? Math.max(...b) : "–"} | ` +
+        `${pct(b, 50) ?? "–"} / ${pct(b, 90) ?? "–"} / ${p99(b)} / ${b.length ? Math.min(...b) : "–"} / ${b.length ? Math.max(...b) : "–"} | ` +
         `${f(pct(sb, 50))} s / ${f(pct(sb, 90))} s | ${f(pct(st, 50), 0)} s / ${f(pct(st, 90), 0)} s | ${f(pct(w, 50))} s |`,
     );
+    if (sb.length) derived.push([chain, pct(sb, 50), pct(sb, 90)]);
+  }
+
+  // Derived, not measured: swap Lasna's ~1 s block for the legacy ~7 s block. A transaction waits for the next
+  // reactive block, uniformly between 0 and one block, so on average +3 s and at worst +6 s over what we measured.
+  if (derived.length) {
+    lines.push(
+      "",
+      "## Why it needs Omni: the same loop on legacy Reactive (derived)",
+      "",
+      "Measured on Omni, then the reactive block (~1 s) swapped for legacy Reactive's ~7 s block: +3 s on average",
+      "(half a block of waiting), up to +6 s. Everything else is our measurement. **Derived, not measured**: nothing",
+      "was run on legacy Reactive. In money on a real crash: [`what-a-second-buys.md`](what-a-second-buys.md).",
+      "",
+      "| Chain | Omni, measured p50 / p90 | Legacy, derived average | Legacy, derived worst |",
+      "|---|---|---|---|",
+    );
+    for (const [chain, p50, p90] of derived)
+      lines.push(
+        `| ${chain === "base" ? "Base Sepolia" : "Unichain Sepolia"} | **${p50.toFixed(1)} s / ${p90.toFixed(1)} s** | ` +
+          `${(p50 + 3).toFixed(1)} s | ${(p50 + 6).toFixed(1)} s |`,
+      );
   }
 
   for (const chain of ["base", "unichain"]) {

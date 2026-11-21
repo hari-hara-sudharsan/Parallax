@@ -128,6 +128,13 @@ case "$cmd" in
     (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
     (cd "$ROOT/bench" && CHAIN="$SEL" node keeper.mjs "${1:-10}") ;;
 
+  check-links)      # ./tw.sh check-links        → every tx linked in the docs exists on its chain
+    (cd "$ROOT/bench" && node check-links.mjs) ;;
+
+  refusals)         # CHAIN=base ./tw.sh refusals   → on-chain proof of every safety refusal, writes results/REFUSALS.md
+    (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
+    (cd "$ROOT/bench" && CHAIN="$SEL" node refusals.mjs) ;;
+
   abis)             # regenerate the frontend's typed ABIs from Foundry artifacts
     (cd "$ROOT/contracts" && forge build >/dev/null 2>&1) && python "$ROOT/web/scripts/gen-abis.py" "$ROOT" ;;
 
@@ -211,6 +218,8 @@ Parallax
   rule <id>           a rule's status + its on-chain execution record
   keeper <N>          off-chain keeper-bot baseline on the same pool (for comparison)
   bench <N>           N automated live rounds → results/<chain>-<date>.json + results/SUMMARY.md
+  check-links         verify every transaction linked in the docs exists on its chain
+  refusals            on-chain proof of each safety refusal (unauthorized, in-band, stale, dedupe, cancel)
   abis                regenerate web/src/lib/generated/abis.ts
   callbacks <tx>      Lasna getCallbacks for a reactive tx
 EOF

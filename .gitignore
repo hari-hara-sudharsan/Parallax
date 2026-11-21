@@ -25,3 +25,4 @@ Thumbs.db
 contracts/deployments/31337.json
 bench/node_modules/
 .taste-skill/
+analysis/data/
