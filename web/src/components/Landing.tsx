@@ -55,12 +55,15 @@ function useFacts() {
   };
 }
 
-/** The newest loop: live when the executors are readable, else the newest stored one. */
-function useLatestLoop(): FeedItem | undefined {
+/**
+ * A typical loop for the hero: the newest Base loop that took exactly the median number of blocks. The newest live
+ * loop is shown as-is in the app; here a single slow outlier would misrepresent the typical case.
+ */
+function useMedianLoop(medianBlocks: number): FeedItem | undefined {
   const { data } = useActivity();
-  const live = data?.items.find((x) => x.state === "executed" && x.latencyBlocks !== undefined);
+  const live = data?.items.find((x) => x.state === "executed" && x.chain === "base" && x.latencyBlocks === medianBlocks);
   if (live) return live;
-  const e = [...PROOFS.executions].sort((a, b) => b.t1 - a.t1)[0];
+  const e = [...PROOFS.executions].filter((x) => x.chain === "base" && x.latencyBlocks === medianBlocks && x.reactiveTx).sort((a, b) => b.t1 - a.t1)[0];
   if (!e) return undefined;
   return {
     key: `stored:${e.chain}:${e.ruleId}`,
@@ -98,8 +101,8 @@ export function Landing() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function Hero() {
-  const loop = useLatestLoop();
   const facts = useFacts();
+  const loop = useMedianLoop(facts.baseBlocks);
   const [replay, setReplay] = useState(0);
   return (
     <header className="relative min-h-[min(100svh,820px)] overflow-hidden">
@@ -147,7 +150,7 @@ function Hero() {
             </Link>
             {loop && (
               <button type="button" onClick={() => setReplay((r) => r + 1)} className="m-lift hidden h-12 rounded-full px-4 text-[15px] text-muted transition-colors hover:text-ink lg:inline-block">
-                ↻ Replay the last loop
+                ↻ Replay a median loop
               </button>
             )}
           </div>
@@ -178,7 +181,7 @@ function HeroLoop({ loop }: { loop?: FeedItem }) {
       <Dot x={end} delay={2300} big />
       <Label x={start} delay={1100} top="Swap" sub={loop?.originBlock ? `block ${loop.originBlock.toLocaleString("en-US")}` : "the price crosses"} />
       <Label x={lasna} delay={1700} top="Reactive" sub="on Lasna" />
-      <Label x={end} delay={2400} top={`${((n * c.blockMs) / 1000).toFixed(1)} s`} sub={`executed, ${n} blocks`} strong />
+      <Label x={end} delay={2400} top={`${((n * c.blockMs) / 1000).toFixed(1)} s`} sub={`executed, ${n} blocks · the median`} strong />
     </div>
   );
 }
@@ -405,7 +408,37 @@ function Tile({ className, caption, line, children, i }: { className: string; ca
   );
 }
 
+/** Both chains, one reactive contract: switch between them to see each chain's own measured median. */
+function ChainTile({ facts }: { facts: ReturnType<typeof useFacts> }) {
+  const [k, setK] = useState<"base" | "unichain">("base");
+  const blocks = k === "base" ? facts.baseBlocks : facts.uniBlocks;
+  const ms = CHAINS[k].blockMs;
+  return (
+    <Tile
+      i={7}
+      className="col-span-2 row-span-2 bg-[#202023] md:col-span-6 md:row-span-2"
+      caption="Base and Unichain"
+      line={`One reactive contract guards both · median on ${CHAINS[k].short}: ${((blocks * ms) / 1000).toFixed(1)} s, ${blocks} blocks of ${ms >= 1000 ? "1 s" : `${ms} ms`}`}
+    >
+      <span role="group" aria-label="Chain" className="inline-flex rounded-full bg-raised p-[0.1em] text-[18px] font-semibold leading-[1.15] md:text-[22px]">
+        {(["base", "unichain"] as const).map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={k === c}
+            onClick={() => setK(c)}
+            className={cx("rounded-full px-[0.6em] py-[0.1em] transition-colors", k === c ? "bg-[#4a4a4f] text-ink" : "text-muted hover:text-ink")}
+          >
+            {CHAINS[c].short}
+          </button>
+        ))}
+      </span>
+    </Tile>
+  );
+}
+
 function Features() {
+  const facts = useFacts();
   return (
     <section aria-labelledby="feat-h" className="mx-auto max-w-[1200px] px-5 pb-20 md:px-10 md:pb-24">
       <div className="grid auto-rows-[96px] grid-cols-2 gap-1.5 md:auto-rows-[72px] md:grid-cols-12 md:gap-2">
@@ -434,8 +467,8 @@ function Features() {
         <Tile i={4} className="row-span-2 bg-[#0e2a17] md:col-span-3 md:row-span-3" caption="Re-checked on‑chain" line="Nothing executes on stale data">
           <span className="inline-block rounded-full bg-executed/20 px-[0.55em] py-[0.12em] text-[22px] font-semibold leading-[1.15] text-executed md:text-[26px] lg:text-[30px]">Executed</span>
         </Tile>
-        <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-3" caption="About a second" line="Swap to execution on Base">
-          <span className="num block text-[56px] font-bold leading-none tracking-[-0.05em] md:text-[64px]">1.6</span>
+        <Tile i={5} className="row-span-2 bg-[#202023] md:col-span-3 md:row-span-3" caption="About a second" line="Median, swap to execution on Base">
+          <span className="num block text-[56px] font-bold leading-none tracking-[-0.05em] md:text-[64px]">{facts.baseSeconds.toFixed(1)}<span className="text-[0.5em] text-muted"> s</span></span>
         </Tile>
         <Tile i={6} className="col-span-2 row-span-2 bg-panel md:col-span-6 md:row-span-2" caption="Vault" line="Steps out of a crash, back in when calm">
           <span className="flex flex-wrap gap-2.5 text-[18px] font-semibold leading-[1.15] md:text-[22px]">
@@ -443,12 +476,7 @@ function Features() {
             <span className="whitespace-nowrap rounded-full bg-executed/15 px-[0.5em] py-[0.1em] text-executed">Re‑entered</span>
           </span>
         </Tile>
-        <Tile i={7} className="col-span-2 row-span-2 bg-[#202023] md:col-span-6 md:row-span-2" caption="Base and Unichain" line="One reactive contract guards both">
-          <span className="inline-flex rounded-full bg-raised p-[0.1em] text-[18px] font-semibold leading-[1.15] md:text-[22px]">
-            <span className="rounded-full bg-[#4a4a4f] px-[0.6em] py-[0.1em]">Base</span>
-            <span className="px-[0.6em] py-[0.1em] text-muted">Unichain</span>
-          </span>
-        </Tile>
+        <ChainTile facts={facts} />
       </div>
     </section>
   );

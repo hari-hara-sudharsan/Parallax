@@ -69,10 +69,12 @@ export function ProofView() {
             <Stat label="Unichain median" value={uni.length ? `${median(uni)} blocks` : "—"} sub={uni.length ? `≈ ${median(uni)} s · ${uni.length} loops` : undefined} />
           </div>
           <div className="bg-panel px-7 py-6">
-            <Stat label="Keeper bot, Base (same pool, same RPC)" value="10 blocks" sub="median of 20 runs · bench/keeper.mjs" />
+            <Stat label="Keeper bot, Base (same pool, same RPC)" value="10 blocks" sub="median of 70 runs · bench/keeper.mjs" />
           </div>
         </div>
       </section>
+
+      <SpeedAndMoney baseP50={base.length ? (median(base)! * 200) / 1000 : 1.4} />
 
       <Panel i={1} className="min-w-0" title="Every loop, origin → reactive → callback" aside={<Segmented label="Show" options={FILTERS} value={filter} onChange={setFilter} />}>
         <div className="-mx-7 overflow-x-auto">
@@ -120,5 +122,47 @@ export function ProofView() {
         </p>
       </Panel>
     </div>
+  );
+}
+
+/**
+ * Speed in seconds and in money. Latencies: results/SUMMARY.md (measured) and its derived-legacy table. Cost: results/
+ * what-a-second-buys.md, the worst 30 minutes of the 10 Oct 2025 ETH crash on Binance 1 s candles, p95 over every second.
+ */
+const SPEEDS = [
+  { label: "Parallax on Omni", note: "measured median, Base", s: 0, p95Bps: 25.4, strong: true },
+  { label: "Keeper bot", note: "measured median, same pool, 250 ms polling", s: 2.0, p95Bps: 33.5 },
+  { label: "Legacy Reactive", note: "derived average (7 s blocks)", s: 4.4, p95Bps: 58.0 },
+  { label: "Legacy Reactive", note: "derived worst case", s: 7.4, p95Bps: 77.2 },
+];
+
+function SpeedAndMoney({ baseP50 }: { baseP50: number }) {
+  const rows = SPEEDS.map((r) => (r.strong ? { ...r, s: baseP50 } : r));
+  const max = Math.max(...rows.map((r) => r.s));
+  return (
+    <Panel i={1} className="min-w-0" title="What a second is worth" aside={<span className="text-[13px] text-faint">10 Oct 2025 ETH crash</span>}>
+      <div className="grid gap-4">
+        {rows.map((r) => (
+          <div key={r.label + r.note} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 sm:grid-cols-[220px_minmax(0,1fr)_150px]">
+            <div className="min-w-0">
+              <div className={r.strong ? "text-[15px] font-medium text-ink" : "text-[15px] text-muted"}>{r.label}</div>
+              <div className="truncate text-[12px] text-faint">{r.note}</div>
+            </div>
+            <div className="col-span-2 row-start-2 h-3 rounded-full bg-raised sm:col-span-1 sm:row-start-auto">
+              <div className={r.strong ? "h-3 rounded-full bg-active" : "h-3 rounded-full bg-control"} style={{ width: `${(r.s / max) * 100}%` }} />
+            </div>
+            <div className="num text-right text-[14px]">
+              <span className={r.strong ? "font-semibold text-ink" : "text-muted"}>{r.s.toFixed(1)} s</span>
+              <span className="block text-[12px] text-faint">${Math.round(r.p95Bps * 10)} lost / $100k</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-5 text-[12px] leading-5 text-faint">
+        Loss = how far ETH fell while a stop waited to fill, at the 95th percentile of every second in the crash’s worst 30 minutes (Binance
+        1-second candles, checksum-verified). Parallax and the keeper bot are measured; the legacy rows are derived from our loop with Lasna’s
+        ~1 s block swapped for ~7 s, not run. Source: results/what-a-second-buys.md.
+      </p>
+    </Panel>
   );
 }

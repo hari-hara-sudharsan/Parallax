@@ -6,6 +6,7 @@ import { HealthPanel } from "@/components/HealthPanel";
 import { PanicPanel } from "@/components/PanicPanel";
 import { RefusalRoom } from "@/components/RefusalRoom";
 import { TryoutPanel } from "@/components/TryoutPanel";
+import { WhatIfPanel } from "@/components/WhatIfPanel";
 import { LoopStrip } from "@/components/GuardsOverview";
 import { LiveFeed } from "@/components/LiveFeed";
 import { MyRules } from "@/components/MyRules";
@@ -39,6 +40,7 @@ export default function App() {
             <div className="grid min-w-0 grid-cols-1 content-start gap-8 lg:col-span-7">
               <CreateRule />
               <LoopStrip />
+              <WhatIfPanel />
               <PanicPanel />
               <HealthPanel />
             </div>

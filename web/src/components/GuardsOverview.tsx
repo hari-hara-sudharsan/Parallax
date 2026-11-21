@@ -145,8 +145,9 @@ function Strip({ it, median }: { it: FeedItem; median?: { n: number; p50Seconds?
   const span = Math.max(n, keeper ?? 0, 4) + 2; // axis: block 0 … a little past the later of the two
   const x = (b: number) => `${(b / span) * 100}%`;
   const at = (b: number) => `${Math.round(200 + (b / span) * AXIS_MS)}ms`; // when the pen reaches block b
-  const reactBlocks =
-    it.reactiveAt !== undefined && it.t0 !== undefined ? Math.min(Math.max(((it.reactiveAt - it.t0) * 1000) / c.blockMs, 0), n) : undefined;
+  // Lasna and the origin chain keep separate clocks with 1 s timestamps, so Lasna's position inside a 1-2 s loop can't be
+  // placed honestly (it often reads as block 0 and sat on top of "Swap"). It is drawn as the middle hop, not at a time.
+  const reactBlocks = it.reactiveTx ? n / 2 : undefined;
   const ticks = Array.from({ length: Math.floor(span / 2) + 1 }, (_, i) => i * 2).filter((t) => t <= span);
   const counted = useCountUp(n, 200 + (n / span) * AXIS_MS);
 
