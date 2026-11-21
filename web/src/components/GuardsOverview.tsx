@@ -183,9 +183,13 @@ function Strip({ it, median }: { it: FeedItem; median?: { n: number; p50Seconds?
           </>
         )}
         {/* stations, each arriving when the pen reaches it */}
+        {/* Labels never collide: Swap is left-aligned at 0, Executed is centred on its block (right-aligned near the
+            end), and Lasna's label is shown only when there is room between the two. */}
         <Station at={x(0)} delay="120ms" label="Swap" align="start" />
-        {reactBlocks !== undefined && <Station at={x(reactBlocks)} delay={at(reactBlocks)} label="Lasna" hollow />}
-        <Station at={x(n)} delay={at(n)} label="Executed" strong />
+        {reactBlocks !== undefined && (
+          <Station at={x(reactBlocks)} delay={at(reactBlocks)} label={(n / span) * 100 >= 30 ? "Lasna" : ""} hollow />
+        )}
+        <Station at={x(n)} delay={at(n)} label="Executed" strong align={n / span > 0.9 ? "end" : undefined} />
         {/* block ticks */}
         <div className="absolute inset-x-0 top-[44px]">
           {ticks.map((t) => (
@@ -229,7 +233,7 @@ function Strip({ it, median }: { it: FeedItem; median?: { n: number; p50Seconds?
   );
 }
 
-function Station({ at, delay, label, strong, hollow, align }: { at: string; delay: string; label: string; strong?: boolean; hollow?: boolean; align?: "start" }) {
+function Station({ at, delay, label, strong, hollow, align }: { at: string; delay: string; label: string; strong?: boolean; hollow?: boolean; align?: "start" | "end" }) {
   const v = { left: at, "--delay": delay } as CSSProperties;
   return (
     <>
@@ -246,7 +250,7 @@ function Station({ at, delay, label, strong, hollow, align }: { at: string; dela
         style={v}
       />
       <span
-        className={"m-label absolute top-[-8px] whitespace-nowrap text-[13px] text-muted " + (align === "start" ? "" : "-translate-x-1/2")}
+        className={"m-label absolute top-[-8px] whitespace-nowrap text-[13px] text-muted " + (align === "start" ? "" : align === "end" ? "-translate-x-full" : "-translate-x-1/2")}
         style={v}
       >
         {label}

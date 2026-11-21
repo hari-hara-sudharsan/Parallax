@@ -96,6 +96,7 @@ for (const D of lasnaOk ? DEPLOYMENTS : []) for (const C0 of CHAINS) {
     if (known.get(key)?.reactiveTx) continue; // complete rows never change
     const ex = await pub.readContract({ address: C.executor, abi: executorAbi, functionName: "executions", args: [id] });
     if (ex[2] === 0n) continue; // not executed
+    if (ex[0] === 0n) continue; // closed by Panic Exit in the owner's own tx: no origin swap, not a reactive loop
     const [log] = await pub.getContractEvents({ address: C.executor, abi: executorAbi, eventName: "RuleExecuted", args: { ruleId: id }, fromBlock: ex[2], toBlock: ex[2] });
     const t0 = Number((await pub.getBlock({ blockNumber: ex[1] })).timestamp);
     const t1 = Number((await pub.getBlock({ blockNumber: ex[2] })).timestamp);

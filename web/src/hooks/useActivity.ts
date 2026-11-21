@@ -188,6 +188,9 @@ async function loadActivity(): Promise<Activity> {
   for (const chain of CHAIN_LIST) {
     for (const [id, rec] of records) {
       if (!id.startsWith(`${chain.key}:`)) continue;
+      // A Panic Exit closes rules inside the owner's own transaction and records no origin swap (hash 0, same block).
+      // That is not a reactive loop, so it never counts as a latency.
+      if (rec.originTxHash === 0n) continue;
       const blocks = rec.executedBlock - rec.originBlock;
       executed.push({
         key: id,
