@@ -1,0 +1,26 @@
+{
+  "chain": "base",
+  "chainId": 84532,
+  "executor": "0x98f96fd0b1cb9B723157D3686446004EcA066982",
+  "reactive": "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3",
+  "ranAt": "2026-11-21T10:10:33.385Z",
+  "results": {
+    "stale": {
+      "claim": "A stale trigger is re-checked on-chain, skipped, re-armed, and fills on the next real cross",
+      "ruleId": 108,
+      "line": 198439,
+      "createTx": "0x5b8ef09de2ba438c6554be1947874cfb0512a4d494e5a4b8409e1693a1838818",
+      "crossTx": "0x0e59a94ab13d06e85920171ed0ad8f7216dfcdfcd3be057605a9bc7aff6764db",
+      "snapBackTx": "0x713b6b03def981d12c436cdcb330385f089c56408e2b556ebe5b818677c9f03d",
+      "reactiveTx": "0xcbc7e32a95513cbe6db3714081bda6fb25f655c5df36611f3064f575cf19cc4f",
+      "skippedTx": "0x090de1df08d0481285147c32b842c2cb0ce041af95fedfdf56689e2172730883",
+      "skipReason": 1,
+      "skipTick": 198388,
+      "rearmTx": "0x8787c12c8caf24b4e9d9c2b1b400290add92c55d6549008565e79ccdf701b2f3",
+      "crossAgainTx": "0xfa301d40a85858a532e808fdc430a8e928cc0afae06294df29a5116bccdcb6f6",
+      "reactiveTx2": "0xbca7db9a513b610c9ef54db2ddd52e1d232b24df08a484f4bdf53cb7c4826da8",
+      "filledTx": "0xbc082c632c60b38eb04ed9771df7321f22344b1c8ea52c0b3a22274af9673853",
+      "proven": true
+    }
+  }
+}

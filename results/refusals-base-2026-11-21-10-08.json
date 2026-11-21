@@ -1,0 +1,13 @@
+{
+  "chain": "base",
+  "chainId": 84532,
+  "executor": "0x98f96fd0b1cb9B723157D3686446004EcA066982",
+  "reactive": "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3",
+  "ranAt": "2026-11-21T10:10:01.156Z",
+  "results": {
+    "stale": {
+      "proven": false,
+      "error": "RPC Request failed."
+    }
+  }
+}

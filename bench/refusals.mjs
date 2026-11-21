@@ -326,7 +326,9 @@ function writeReport() {
   const R = {};
   const runs = readdirSync(outDir).filter((f) => f.startsWith(`refusals-${chainName}-`) && f.endsWith(".json")).sort();
   for (const f of runs) {
-    for (const [k, v] of Object.entries(JSON.parse(readFileSync(join(outDir, f), "utf8")).results ?? {})) {
+    const run = JSON.parse(readFileSync(join(outDir, f), "utf8"));
+    if (run.executor?.toLowerCase() !== executor.toLowerCase()) continue; // only runs against this deployment
+    for (const [k, v] of Object.entries(run.results ?? {})) {
       if (v.proven || !R[k]?.proven) R[k] = v;
     }
   }
