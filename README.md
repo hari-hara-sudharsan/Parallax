@@ -26,6 +26,15 @@ No bot, no server, no hot key, and nothing you run has to stay online.
 | 🧪 **Tested to break** | **119 Foundry tests** (fork tests on live v4, invariant fuzzing with lost and reordered events), guards checked by [mutation testing](results/mutants.md), [CI](.github/workflows/test.yml), 93% line coverage, Slither triaged, every contract **Sourcify-verified** |
 | 🖥️ **Dashboard** | **[parallax-kappa-six.vercel.app](https://parallax-kappa-six.vercel.app)**: open the app, connect MetaMask on Base Sepolia, arm a stop, press "Crash the price" |
 
+### For judges: where each criterion is answered
+
+| Criterion | Look here |
+|---|---|
+| **Execution** | 174 live rounds with every origin → reactive → callback hash: [`results/SUMMARY.md`](results/SUMMARY.md). Live v5 runs (zero-setup tryout from a brand-new wallet, cross-chain Panic Exit, debt-pause recovery): [`deployments/tx-proofs.md`](deployments/tx-proofs.md). Try one yourself below with only gas. |
+| **Integration** | [What the reactive contract decides](#the-reactive-contract-does-the-real-work): it holds the order book for two chains, subscribes and unsubscribes pools from inside `react()`, de-duplicates, raises trailing stops, re-arms stale triggers, relays panics and drops rules the executor reports as settled. Remove it and nothing fires. |
+| **Usefulness** | Stops, take-profits, trailing stops and LP guards that **re-centre** instead of just exiting, a managed `pxLP` vault, and one-click Panic Exit across chains, all on real Uniswap v4. Speed in money: [`results/what-a-second-buys.md`](results/what-a-second-buys.md). |
+| **Craft** | 119 tests incl. invariant fuzzing, 34/34 [mutants](results/mutants.md) killed, [CI](.github/workflows/test.yml), [coverage](results/coverage.md), [Slither triage](results/slither-triage.md), every contract Sourcify-verified, [claims → evidence](docs/CLAIMS.md), [refusal room](results/REFUSALS.md), [copy-paste setup](docs/setup.md). |
+
 ---
 
 ## Verify it in 60 seconds
@@ -183,6 +192,10 @@ Take Reactive away and you need a bot again, because these jobs all run on Lasna
   live tick.
 - **It recovers.** When the executor reports a stale trigger (`RuleSkipped`), it re-arms the rule.
 - **One contract serves both chains.** A single reactive contract guards Base Sepolia and Unichain Sepolia.
+- **It relays panics.** A `PanicRequested` on one chain becomes a `panicExit` callback on every other chain, and it
+  keeps asking while rules remain.
+- **It heals after a pause.** If the executor answers `NOT_ACTIVE` (the rule was already settled, e.g. while the
+  contract was paused for debt), the mirror drops the rule instead of re-arming it, and `resync` re-announces any rule.
 
 Details: [`docs/architecture.md`](docs/architecture.md).
 
