@@ -69,6 +69,7 @@ case "$cmd" in
     CHAIN=unichain "$0" deploy-executor && CHAIN=unichain "$0" add-chain
     CHAIN=base     "$0" deploy-executor && CHAIN=base     "$0" add-chain
     CHAIN=unichain "$0" debts; CHAIN=base "$0" debts ;;
+  deploy-tryout)     chain_script script/15_DeployTryout.s.sol:DeployTryout ;;   # zero-setup judge path
   # ── Parallax Vault (keeperless managed LP). Order: brain (Lasna) → vault (chain) → set-vault (Lasna) ──
   deploy-vault-reactive) VAULT_CHAIN_ID=$CID lasna_script script/11_DeployVaultReactive.s.sol:DeployVaultReactive ;;
   deploy-vault)          chain_script script/12_DeployVault.s.sol:DeployVault ;;
@@ -210,6 +211,7 @@ Demo pool (per chain)
 Parallax
   deploy-parallax     one ParallaxReactive (Lasna) + an executor on Unichain AND Base, linked with addChain
   deploy-reactive | deploy-executor | add-chain     the individual steps
+  deploy-tryout       ParallaxTryout on CHAIN: anyone arms a funded stop and crashes it (no tokens needed)
   deploy-vault-all    Parallax Vault: brain on Lasna + vault on CHAIN + wiring; vault-deposit; vault (state)
   create-stop-loss | create-take-profit | create-range-guard
   create-trailing-stop (TRAIL_BPS)  |  create-recenter-guard (LP guard that re-centres instead of withdrawing)

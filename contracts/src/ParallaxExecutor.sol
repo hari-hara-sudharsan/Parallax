@@ -78,6 +78,10 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
     /// @notice Trailing distance bounds (1 tick ≈ 1 bp): 0.1% … 50%.
     int24 public constant MIN_TRAIL_TICKS = 10;
     int24 public constant MAX_TRAIL_TICKS = 5000;
+    /// @notice Panic: at most this many rules are closed per call, and at most PANIC_SCAN index entries are read,
+    ///         so a panic always fits its callback gas. If more remain, the reactive side calls again.
+    uint256 public constant MAX_PANIC_PER_CALL = 6;
+    uint256 public constant PANIC_SCAN = 64;
 
     // ── State ───────────────────────────────────────────────────────────────
 
@@ -87,6 +91,11 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
     mapping(uint256 ruleId => Execution) public executions;
     mapping(bytes32 poolId => PoolKey) internal _poolKeys;
     mapping(bytes32 poolId => uint256) public activeRuleCount;
+    /// @notice Active rules per owner on this chain (what a panic still has to close).
+    mapping(address owner => uint256) public activeRulesOf;
+    /// @dev Every rule id an owner ever had here, newest last. A panic pops from the end, so settled ids are
+    ///      cleaned up as it goes and repeated panics always make progress.
+    mapping(address owner => uint256[]) internal _ownerRules;
 
     /// @param callbackProxy_ Reactive Callback Proxy on this chain (Unichain Sepolia: 0x775c…66C1).
     /// @param reactive_ The ParallaxReactive contract on Reactive Network allowed to drive callbacks.
@@ -246,6 +255,7 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
 
         r.status = RuleStatus.CANCELLED;
         activeRuleCount[r.poolId]--;
+        activeRulesOf[r.owner]--;
 
         if (r.ruleType == RuleType.RANGE_GUARD) {
             _nft().transferFrom(address(this), msg.sender, r.positionId);
@@ -290,6 +300,7 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
         // 3. Effects before the external calls (checks-effects-interactions), undone if the action fails.
         r.status = RuleStatus.EXECUTED;
         activeRuleCount[r.poolId]--;
+        activeRulesOf[r.owner]--;
 
         bool ok;
         if (r.ruleType != RuleType.RANGE_GUARD) ok = _swapAndReport(ruleId, r, key, sqrtPriceX96, origin);
@@ -299,6 +310,7 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
         if (!ok) {
             r.status = RuleStatus.ACTIVE;
             activeRuleCount[r.poolId]++;
+            activeRulesOf[r.owner]++;
             emit RuleSkipped(ruleId, SkipReason.ACTION_FAILED, tick, originTxHash);
         }
     }
@@ -336,6 +348,125 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
     /// @dev Open to anyone: funding + restarting the service should never need an admin.
     function coverDebt() external {
         _coverDebt();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Panic Exit: one transaction closes everything, on every chain
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Close all of your rules, here and (through Reactive) on every other chain Parallax serves.
+    /// @dev Here: closed in this transaction. Elsewhere: the reactive contract sees PanicRequested and calls
+    ///      `panicExit` on each other chain's executor. Swap rules sell at market within their own slippage cap
+    ///      (if that fails, the deposit is refunded instead); LP guards withdraw at the current price within their
+    ///      slippage cap (if that fails, the NFT is handed back untouched). Up to MAX_PANIC_PER_CALL rules per call.
+    function panic() external nonReentrant returns (uint256 closed, uint256 remaining) {
+        (closed, remaining) = _panicClose(msg.sender);
+        emit PanicRequested(msg.sender, closed, remaining);
+    }
+
+    /// @inheritdoc IParallaxExecutor
+    function panicExit(address reactiveSender, address owner_)
+        external
+        override
+        nonReentrant
+        onlyServiceProvider
+        onlyCallbackSender(reactiveSender)
+    {
+        (uint256 closed, uint256 remaining) = _panicClose(owner_);
+        emit PanicExecuted(owner_, closed, remaining);
+    }
+
+    function _panicClose(address owner_) internal returns (uint256 closed, uint256 remaining) {
+        uint256[] storage ids = _ownerRules[owner_];
+        for (uint256 scanned; ids.length > 0 && scanned < PANIC_SCAN && closed < MAX_PANIC_PER_CALL; ++scanned) {
+            uint256 ruleId = ids[ids.length - 1];
+            ids.pop();
+            Rule storage r = rules[ruleId];
+            if (r.status != RuleStatus.ACTIVE) continue; // settled earlier: just clean the index
+            _panicCloseOne(ruleId, r);
+            ++closed;
+        }
+        remaining = activeRulesOf[owner_];
+    }
+
+    /// @dev Closes one active rule regardless of its trigger. Never reverts: every path ends with the owner
+    ///      holding their value (sale proceeds, withdrawn tokens, the refunded deposit, or the NFT).
+    function _panicCloseOne(uint256 ruleId, Rule storage r) internal {
+        PoolKey memory key = _poolKeys[r.poolId];
+        r.status = RuleStatus.EXECUTED;
+        activeRuleCount[r.poolId]--;
+        activeRulesOf[r.owner]--;
+        Origin memory origin = Origin(0, block.number); // originTxHash 0 marks a panic close
+
+        bool ok;
+        if (r.ruleType == RuleType.RANGE_GUARD) {
+            ok = _panicWithdraw(ruleId, r, key, origin);
+            if (!ok) _nft().transferFrom(address(this), r.owner, r.positionId);
+        } else {
+            (uint160 sqrtPriceX96,,,) = POOL_MANAGER.getSlot0(key.toId());
+            ok = _swapAndReport(ruleId, r, key, sqrtPriceX96, origin);
+            if (!ok) ERC20(_inputToken(key, r.zeroForOne)).safeTransfer(r.owner, r.amountIn);
+        }
+        if (!ok) {
+            r.status = RuleStatus.CANCELLED; // value returned as-is instead of converted
+            emit RuleCancelled(ruleId, r.owner);
+        }
+    }
+
+    /// @dev Like a range-guard withdrawal, but the position may still be in range, so both minimums come from
+    ///      the current price (minus the rule's slippage cap) instead of the single-sided out-of-range amount.
+    function _panicWithdraw(uint256 ruleId, Rule storage r, PoolKey memory key, Origin memory origin)
+        internal
+        returns (bool)
+    {
+        address owner_ = r.owner;
+        bytes memory data = _panicWithdrawCalldata(r, key, owner_);
+        (uint256 bal0, uint256 bal1) = _balances(key, owner_);
+        try POSITION_MANAGER.modifyLiquidities(data, block.timestamp) {
+            _nft().transferFrom(address(this), owner_, r.positionId);
+            (uint256 now0, uint256 now1) = _balances(key, owner_);
+            _recordExecution(ruleId, owner_, key, now0 - bal0, now1 - bal1, origin);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @dev DECREASE_LIQUIDITY (all of it) + TAKE_PAIR to the owner, minimums = current amounts minus slippage.
+    function _panicWithdrawCalldata(Rule storage r, PoolKey memory key, address recipient)
+        internal
+        view
+        returns (bytes memory)
+    {
+        (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
+        uint128 liquidity = POSITION_MANAGER.getPositionLiquidity(r.positionId);
+        (uint256 a0, uint256 a1) = _amountsForLiquidity(
+            sqrtP, TickMath.getSqrtPriceAtTick(r.lowerTick + 1), TickMath.getSqrtPriceAtTick(r.upperTick), liquidity
+        );
+        uint256 keep = 10_000 - r.maxSlippageBps;
+        bytes memory actions = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY), uint8(Actions.TAKE_PAIR));
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(
+            r.positionId, uint256(liquidity), uint128(a0 * keep / 10_000), uint128(a1 * keep / 10_000), bytes("")
+        );
+        params[1] = abi.encode(key.currency0, key.currency1, recipient);
+        return abi.encode(actions, params);
+    }
+
+    /// @dev Token amounts a position of `liquidity` on [sqrtLower, sqrtUpper) holds at price sqrtP (rounded down).
+    function _amountsForLiquidity(uint160 sqrtP, uint160 sqrtLower, uint160 sqrtUpper, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 a0, uint256 a1)
+    {
+        if (sqrtP <= sqrtLower) {
+            a0 = SqrtPriceMath.getAmount0Delta(sqrtLower, sqrtUpper, liquidity, false);
+        } else if (sqrtP < sqrtUpper) {
+            a0 = SqrtPriceMath.getAmount0Delta(sqrtP, sqrtUpper, liquidity, false);
+            a1 = SqrtPriceMath.getAmount1Delta(sqrtLower, sqrtP, liquidity, false);
+        } else {
+            a1 = SqrtPriceMath.getAmount1Delta(sqrtLower, sqrtUpper, liquidity, false);
+        }
     }
 
     /// @notice Re-announce a rule's current state so the reactive mirror can catch up.
@@ -584,6 +715,8 @@ contract ParallaxExecutor is AbstractCallback, V4LiquidityOps, IParallaxExecutor
         rules[ruleId] = r;
         if (Currency.unwrap(_poolKeys[r.poolId].currency1) == address(0)) _poolKeys[r.poolId] = key;
         activeRuleCount[r.poolId]++;
+        activeRulesOf[r.owner]++;
+        _ownerRules[r.owner].push(ruleId);
     }
 
     /// @dev Pool must be a live ERC20/ERC20 static-fee pool, and the rule must not fire immediately

@@ -6,6 +6,7 @@ import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {ISystemContract} from "reactive-lib-omni/interfaces/ISystemContract.sol";
 
 import {IParallaxExecutor} from "./interfaces/IParallaxExecutor.sol";
+import {TwoStepOwnable} from "./base/TwoStepOwnable.sol";
 import {RuleType, SkipReason} from "./libraries/RuleTypes.sol";
 
 /// @title ParallaxReactive
@@ -20,14 +21,16 @@ import {RuleType, SkipReason} from "./libraries/RuleTypes.sol";
 ///      Never revert in `react()` to filter: reverts are still billed. Unknown logs fall through.
 ///      Each executor re-validates the price on its own chain, which is why a rule's callback always
 ///      goes back to the chain whose pool tripped it.
-contract ParallaxReactive is AbstractReactive {
+contract ParallaxReactive is AbstractReactive, TwoStepOwnable {
     // ── Errors ──────────────────────────────────────────────────────────────
-    error NotOwner();
     error ChainAlreadyAdded(uint256 chainId);
+    error TooManyChains();
     error ZeroAddress();
 
     // ── Events (on Reactive Network: these make each reactive tx readable in Reactscan) ──
     event ChainAdded(uint256 indexed chainId, address poolManager, address executor);
+    /// @notice A panic from `fromChain` was relayed to `toChain` (equal when continuing on the same chain).
+    event PanicRelayed(uint256 indexed fromChain, uint256 indexed toChain, address indexed owner);
     event PoolWatched(uint256 indexed chainId, bytes32 indexed poolId);
     event PoolUnwatched(uint256 indexed chainId, bytes32 indexed poolId);
     event RuleMirrored(
@@ -61,6 +64,14 @@ contract ParallaxReactive is AbstractReactive {
     uint256 public constant RULE_SKIPPED_TOPIC0 = uint256(keccak256("RuleSkipped(uint256,uint8,int24,uint256)"));
     uint256 public constant RULE_UPDATED_TOPIC0 = uint256(keccak256("RuleUpdated(uint256,int24,int24)"));
     uint256 public constant RULE_SETTLED_TOPIC0 = uint256(keccak256("RuleSettled(uint256,uint8)"));
+    uint256 public constant PANIC_REQUESTED_TOPIC0 = uint256(keccak256("PanicRequested(address,uint256,uint256)"));
+    uint256 public constant PANIC_EXECUTED_TOPIC0 = uint256(keccak256("PanicExecuted(address,uint256,uint256)"));
+
+    /// @notice Gas for a `panicExit` callback: up to MAX_PANIC_PER_CALL (6) closes of ~250–350k each, plus the
+    ///         Callback Proxy's reserve. Billed on gas used, so the headroom costs nothing.
+    uint64 public constant PANIC_GAS_LIMIT = 3_000_000;
+    /// @notice Bounds the panic relay loop (one callback per other chain).
+    uint256 public constant MAX_CHAINS = 8;
 
     /// @notice Gas limit for `execute` callbacks. Measured: swap ≈ 220k, LP withdraw ≈ 300k, LP re-centre ≈ 900k.
     /// @dev The Callback Proxy keeps ~130k of the limit for its own accounting (`_extraGas` + `_maxChargeGas`),
@@ -90,7 +101,6 @@ contract ParallaxReactive is AbstractReactive {
         address executor; //    ParallaxExecutor on that chain (origin of rule events + callback target)
     }
 
-    address public owner;
     mapping(uint256 chainId => ChainConfig) public chains;
     uint256[] public chainIds;
 
@@ -113,14 +123,7 @@ contract ParallaxReactive is AbstractReactive {
     mapping(uint256 key => MirrorRule) internal _mirror;
     mapping(bytes32 poolKey => uint256[] ruleIds) internal _poolRules;
 
-    constructor() payable {
-        owner = msg.sender;
-    }
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
-    }
+    constructor() payable {}
 
     // ════════════════════════════════════════════════════════════════════════
     //  Setup (deployment order: Reactive → Executor(proxy, this) on each chain → addChain per chain)
@@ -132,18 +135,21 @@ contract ParallaxReactive is AbstractReactive {
     function addChain(uint256 chainId, address poolManager, address executor) external onlyOwner {
         if (chains[chainId].executor != address(0)) revert ChainAlreadyAdded(chainId);
         if (poolManager == address(0) || executor == address(0)) revert ZeroAddress();
+        if (chainIds.length >= MAX_CHAINS) revert TooManyChains();
         chains[chainId] = ChainConfig(poolManager, executor);
         chainIds.push(chainId);
 
-        uint256[6] memory topics = [
+        uint256[8] memory topics = [
             RULE_CREATED_TOPIC0,
             RULE_CANCELLED_TOPIC0,
             RULE_EXECUTED_TOPIC0,
             RULE_SKIPPED_TOPIC0,
             RULE_UPDATED_TOPIC0,
-            RULE_SETTLED_TOPIC0
+            RULE_SETTLED_TOPIC0,
+            PANIC_REQUESTED_TOPIC0,
+            PANIC_EXECUTED_TOPIC0
         ];
-        for (uint256 i; i < 6; ++i) {
+        for (uint256 i; i < 8; ++i) {
             SYSTEM.subscribe(chainId, executor, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
         }
         emit ChainAdded(chainId, poolManager, executor);
@@ -187,6 +193,10 @@ contract ParallaxReactive is AbstractReactive {
             uint256 reason = log_.data.length >= 32 ? abi.decode(log_.data, (uint256)) : type(uint256).max;
             if (reason == uint256(SkipReason.NOT_ACTIVE)) _removeRule(log_.chainId, log_.topic1);
             else _rearm(log_.chainId, log_.topic1);
+        } else if (t0 == PANIC_REQUESTED_TOPIC0) {
+            _onPanicRequested(log_);
+        } else if (t0 == PANIC_EXECUTED_TOPIC0) {
+            _onPanicExecuted(log_);
         } else if (t0 == RULE_UPDATED_TOPIC0) {
             _onRuleUpdated(log_);
         }
@@ -313,6 +323,43 @@ contract ParallaxReactive is AbstractReactive {
 
         emit RuleRemoved(chainId, ruleId, poolId);
         if (list.length == 0) _unwatchPool(chainId, poolId); // last rule gone → stop paying for its swaps
+    }
+
+    // ── Panic Exit ──────────────────────────────────────────────────────────
+
+    /// @dev PanicRequested(owner, closed, remaining) on one chain: that chain closed the owner's rules itself, so
+    ///      relay the panic to every other chain we serve.
+    function _onPanicRequested(LogRecord memory log_) internal {
+        address owner_ = address(uint160(log_.topic1));
+        uint256 n = chainIds.length;
+        for (uint256 i; i < n; ++i) {
+            uint256 target = chainIds[i];
+            if (target == log_.chainId) continue;
+            _requestPanicExit(target, owner_);
+            emit PanicRelayed(log_.chainId, target, owner_);
+        }
+    }
+
+    /// @dev PanicExecuted(owner, closed, remaining): one call closes at most a handful of rules. If some remain on
+    ///      that chain, ask again. Every call removes at least one entry from the owner's index, so this ends.
+    function _onPanicExecuted(LogRecord memory log_) internal {
+        if (log_.data.length < 64) return;
+        (uint256 closed, uint256 remaining) = abi.decode(log_.data, (uint256, uint256));
+        if (remaining == 0 || closed == 0) return; // done, or nothing left this call could close
+        address owner_ = address(uint160(log_.topic1));
+        _requestPanicExit(log_.chainId, owner_);
+        emit PanicRelayed(log_.chainId, log_.chainId, owner_);
+    }
+
+    function _requestPanicExit(uint256 chainId, address owner_) internal {
+        SYSTEM.requestCallbackV_1_0(
+            ISystemContract.CallbackConfiguration_V_1_0({
+                chainId: chainId,
+                recipient: chains[chainId].executor,
+                gasLimit: PANIC_GAS_LIMIT,
+                payload: abi.encodeCall(IParallaxExecutor.panicExit, (address(0), owner_))
+            })
+        );
     }
 
     // ── Reactive Network calls ──────────────────────────────────────────────

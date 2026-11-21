@@ -119,16 +119,22 @@ contract ParallaxVault is AbstractCallback, V4LiquidityOps, ERC20, ReentrancyGua
     //  Depositors
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Deposit both pool tokens (approve first) and receive pxLP shares priced at the live pool price.
-    ///         The first deposit opens the vault's position; later ones are added to it (or wait idle while
-    ///         the vault is evacuated).
+    /// @notice Deposit up to `amount0` / `amount1` (approve first) and receive pxLP shares.
+    /// @dev Later deposits are minted IN PROPORTION to what the vault holds, like Uniswap v2 LP shares: no price
+    ///      is involved, so moving the pool price right before depositing (a sandwich) gains nothing. Only the
+    ///      proportional amounts are pulled; any excess of one token stays in your wallet. The first deposit (no
+    ///      one to dilute) is valued at the live price and opens the vault's position.
     function deposit(uint256 amount0, uint256 amount1) external nonReentrant returns (uint256 shares) {
         if (amount0 == 0 && amount1 == 0) revert ZeroAmount();
         PoolKey memory key = _key;
-        (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
-        uint256 before = totalValue0();
-        uint256 valueIn = amount0 + _toToken0(amount1, sqrtP);
-        shares = totalSupply == 0 ? valueIn : FullMath.mulDiv(valueIn, totalSupply, before);
+        uint256 supply = totalSupply;
+        if (supply == 0) {
+            (uint160 sqrtP,,,) = POOL_MANAGER.getSlot0(key.toId());
+            shares = amount0 + _toToken0(amount1, sqrtP);
+        } else {
+            (uint256 total0, uint256 total1) = totalAmounts();
+            (shares, amount0, amount1) = _proportionalMint(amount0, amount1, total0, total1, supply);
+        }
         if (shares == 0) revert ZeroShares();
 
         if (amount0 > 0) ERC20(Currency.unwrap(key.currency0)).safeTransferFrom(msg.sender, address(this), amount0);
@@ -240,6 +246,31 @@ contract ParallaxVault is AbstractCallback, V4LiquidityOps, ERC20, ReentrancyGua
         (uint256 p0, uint256 p1) = positionAmounts();
         (uint256 i0, uint256 i1) = _balances(key, address(this));
         return p0 + i0 + _toToken0(p1 + i1, sqrtP);
+    }
+
+    /// @notice Everything the vault holds, per token (position at the live price + idle balances).
+    function totalAmounts() public view returns (uint256 total0, uint256 total1) {
+        (uint256 p0, uint256 p1) = positionAmounts();
+        (uint256 i0, uint256 i1) = _balances(_key, address(this));
+        (total0, total1) = (p0 + i0, p1 + i1);
+    }
+
+    /// @dev Shares for a deposit proportional to the holdings, limited by the scarcer side, and the exact amounts
+    ///      that buys (rounded up, never more than offered: floor(a·S/T)·T/S ≤ a).
+    function _proportionalMint(uint256 amount0, uint256 amount1, uint256 total0, uint256 total1, uint256 supply)
+        internal
+        pure
+        returns (uint256 shares, uint256 used0, uint256 used1)
+    {
+        if (total0 == 0 && total1 == 0) return (0, 0, 0);
+        shares = type(uint256).max;
+        if (total0 > 0) shares = FullMath.mulDiv(amount0, supply, total0);
+        if (total1 > 0) {
+            uint256 s1 = FullMath.mulDiv(amount1, supply, total1);
+            if (s1 < shares) shares = s1;
+        }
+        used0 = total0 == 0 ? 0 : FullMath.mulDivRoundingUp(shares, total0, supply);
+        used1 = total1 == 0 ? 0 : FullMath.mulDivRoundingUp(shares, total1, supply);
     }
 
     /// @notice Token amounts currently inside the position at the live price (excluding uncollected fees).

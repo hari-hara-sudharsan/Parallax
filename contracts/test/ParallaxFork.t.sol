@@ -23,6 +23,7 @@ import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol"
 import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
 import {ParallaxExecutor} from "../src/ParallaxExecutor.sol";
+import {ParallaxTryout} from "../src/ParallaxTryout.sol";
 import {ParallaxReactive} from "../src/ParallaxReactive.sol";
 import {V4LiquidityOps} from "../src/base/V4LiquidityOps.sol";
 import {IParallaxExecutor} from "../src/interfaces/IParallaxExecutor.sol";
@@ -413,6 +414,199 @@ contract ParallaxForkTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(ParallaxExecutor.RuleNotActive.selector, 999));
         executor.resync(999);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Panic Exit
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev One call closes every kind of rule here: stop-losses are sold at market, an in-range LP guard is
+    ///      withdrawn at the current price, and the owner ends up holding everything.
+    function test_panic_closesEveryRuleHere() public {
+        uint256 s1 = _createStopLoss(1 ether, 100);
+        uint256 s2 = _createStopLoss(0.5 ether, 100); // small enough to sell within its 1% cap (see the refund test)
+        (uint256 g, uint256 positionId,,) = _createRangeGuard();
+        assertEq(executor.activeRulesOf(alice), 3);
+
+        uint256 usdcBefore = usdc.balanceOf(alice);
+        vm.expectEmit(true, false, false, true, address(executor));
+        emit IParallaxExecutor.PanicRequested(alice, 3, 0);
+        vm.prank(alice);
+        (uint256 closed, uint256 remaining) = executor.panic();
+
+        assertEq(closed, 3);
+        assertEq(remaining, 0);
+        assertEq(executor.activeRulesOf(alice), 0);
+        assertEq(uint8(executor.getRule(s1).status), uint8(RuleStatus.EXECUTED));
+        assertEq(uint8(executor.getRule(s2).status), uint8(RuleStatus.EXECUTED));
+        assertEq(uint8(executor.getRule(g).status), uint8(RuleStatus.EXECUTED));
+        assertGt(usdc.balanceOf(alice) - usdcBefore, 4_300e6, "1.5 WETH sold at ~3000");
+        assertEq(IERC721(address(POSM)).ownerOf(positionId), alice, "LP NFT handed back");
+        assertEq(POSM.getPositionLiquidity(positionId), 0, "and emptied");
+        assertEq(weth.balanceOf(address(executor)), 0, "nothing left behind");
+        assertEq(executor.activeRuleCount(poolId), 0);
+    }
+
+    /// @dev Bounded per call so it always fits its callback gas; a second call finishes the job.
+    function test_panic_boundedPerCall_thenFinishes() public {
+        uint256 n = executor.MAX_PANIC_PER_CALL() + 2;
+        for (uint256 i; i < n; ++i) _createStopLoss(0.1 ether, 100);
+        vm.startPrank(alice);
+        (uint256 closed, uint256 remaining) = executor.panic();
+        assertEq(closed, executor.MAX_PANIC_PER_CALL());
+        assertEq(remaining, 2);
+        (closed, remaining) = executor.panic();
+        vm.stopPrank();
+        assertEq(closed, 2);
+        assertEq(remaining, 0);
+    }
+
+    /// @dev Settled and cancelled rules are skipped and cleaned from the index, so panic still makes progress.
+    function test_panic_skipsSettledRules() public {
+        uint256 a = _createStopLoss(1 ether, 100);
+        _createStopLoss(1 ether, 100);
+        vm.startPrank(alice);
+        executor.cancelRule(a);
+        (uint256 closed, uint256 remaining) = executor.panic();
+        assertEq(closed, 1);
+        assertEq(remaining, 0);
+        (closed,) = executor.panic(); // index already empty
+        vm.stopPrank();
+        assertEq(closed, 0);
+    }
+
+    /// @dev If a sale can't meet the rule's slippage cap, the deposit is refunded instead: never stuck.
+    function test_panic_saleFails_refundsDeposit() public {
+        weth.mint(alice, 50 ether);
+        uint256 id = _createStopLoss(50 ether, 50); // ~28% of the pool at a 0.5% cap: the sale must fail
+        uint256 wethBefore = weth.balanceOf(alice);
+        vm.prank(alice);
+        executor.panic();
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.CANCELLED));
+        assertEq(weth.balanceOf(alice) - wethBefore, 50 ether, "full deposit back");
+        assertEq(executor.activeRulesOf(alice), 0);
+    }
+
+    function test_panic_onlyClosesYourOwnRules() public {
+        uint256 mine = _createStopLoss(1 ether, 100);
+        vm.prank(address(0xB0B));
+        (uint256 closed,) = executor.panic();
+        assertEq(closed, 0);
+        assertEq(uint8(executor.getRule(mine).status), uint8(RuleStatus.ACTIVE));
+    }
+
+    /// @dev panicExit is a callback: only the Callback Proxy, carrying our reactive contract, may call it.
+    function test_panicExit_auth_andCloses() public {
+        uint256 id = _createStopLoss(1 ether, 100);
+        vm.expectRevert(abi.encodeWithSelector(AbstractPayer.NotAuthorized.selector, address(this), CALLBACK_PROXY));
+        executor.panicExit(address(reactive), alice);
+
+        vm.prank(CALLBACK_PROXY);
+        vm.expectRevert(abi.encodeWithSelector(AbstractCallback.CallbackNotAuthorized.selector, address(0xBAD), address(reactive)));
+        executor.panicExit(address(0xBAD), alice);
+
+        vm.expectEmit(true, false, false, true, address(executor));
+        emit IParallaxExecutor.PanicExecuted(alice, 1, 0);
+        vm.prank(CALLBACK_PROXY);
+        executor.panicExit(address(reactive), alice);
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED));
+    }
+
+    /// @dev A full panicExit (MAX_PANIC_PER_CALL swap closes) must fit the callback gas the reactive side requests,
+    ///      after the Callback Proxy keeps its own reserve (the v4 raiseTrail bug, applied up front).
+    function test_panicExit_fitsItsCallbackGas() public {
+        for (uint256 i; i < executor.MAX_PANIC_PER_CALL(); ++i) _createStopLoss(0.5 ether, 100);
+        uint256 budget = reactive.PANIC_GAS_LIMIT() - 200_000; // proxy reserve, rounded up
+        vm.prank(CALLBACK_PROXY);
+        uint256 g = gasleft();
+        executor.panicExit{gas: budget}(address(reactive), alice);
+        uint256 used = g - gasleft();
+        emit log_named_uint("panicExit gas for 6 closes", used);
+        assertEq(executor.activeRulesOf(alice), 0, "all closed within the budget");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Full loops for the v5 features (reactive decisions driven by the real recorded logs)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Delivers a recorded callback request exactly as Reactive Network would (sender injected, proxy calls).
+    function _deliverCallbackReq(MockSystemContract.CallbackReq memory cb) internal returns (bool ok) {
+        bytes memory payload = cb.payload;
+        address injected = address(reactive);
+        assembly {
+            mstore(add(payload, 36), injected)
+        }
+        vm.prank(CALLBACK_PROXY);
+        (ok,) = cb.recipient.call{gas: cb.gasLimit - PROXY_OVERHEAD}(payload);
+    }
+
+    /// @dev Zero-setup judge path: a wallet with no tokens arms a stop, crashes the price, and Reactive does the rest.
+    function test_fullLoop_tryout() public {
+        ParallaxTryout tryout = new ParallaxTryout(executor, SWAP_ROUTER, key, weth, usdc);
+        address visitor = makeAddr("visitor");
+        int24 home = _tick();
+
+        vm.recordLogs();
+        vm.prank(visitor);
+        uint256 id = tryout.arm();
+        _deliverRecorded(uint256(keccak256("tx:arm")));
+        assertTrue(reactive.mirror(CHAIN, id).exists, "Lasna mirrored the visitor's stop");
+        assertEq(tryout.armedBy(id), visitor);
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(abi.encodeWithSelector(ParallaxTryout.NotYours.selector, id));
+        tryout.crash(id);
+
+        vm.recordLogs();
+        vm.prank(visitor);
+        tryout.crash(id);
+        assertTrue(executor.isTriggered(id), "the crash crossed the line");
+        _deliverRecorded(uint256(keccak256("tx:crash")));
+        assertEq(sys.callbackCount(), 1, "Reactive requested the callback");
+        assertTrue(_deliverCallbackReq(sys.callbackAt(0)));
+        assertEq(uint8(executor.getRule(id).status), uint8(RuleStatus.EXECUTED), "stop sold");
+
+        tryout.restore();
+        int24 t = _tick();
+        assertTrue(t >= home - tryout.RESTORE_BAND() && t <= home + tryout.RESTORE_BAND(), "price back home");
+
+        uint256 readyAt = block.timestamp + tryout.COOLDOWN(); // read before the prank: a call would consume it
+        vm.prank(visitor);
+        vm.expectRevert(abi.encodeWithSelector(ParallaxTryout.Cooldown.selector, readyAt));
+        tryout.arm();
+        vm.warp(readyAt);
+        vm.prank(visitor);
+        tryout.arm();
+    }
+
+    /// @dev Panic on chain A: A's rules close in the same tx, Reactive relays panicExit to chain B, B's close too.
+    ///      Chain B is a second executor on this fork, registered under Base Sepolia's chain id.
+    function test_fullLoop_panicAcrossTwoChains() public {
+        uint256 chainB = 84532;
+        ParallaxExecutor execB = new ParallaxExecutor(IPayable(payable(CALLBACK_PROXY)), address(reactive), PM, POSM);
+        reactive.addChain(chainB, address(PM), address(execB));
+        vm.prank(alice);
+        weth.approve(address(execB), type(uint256).max);
+
+        uint256 a1 = _createStopLoss(0.5 ether, 100);
+        (bool z, int24 lower, int24 upper) = _stopLossParams();
+        vm.prank(alice);
+        uint256 b1 = execB.createRule(key, RuleType.STOP_LOSS, z, lower, upper, 0.5 ether, 100);
+
+        vm.recordLogs();
+        vm.prank(alice);
+        executor.panic();
+        assertEq(uint8(executor.getRule(a1).status), uint8(RuleStatus.EXECUTED), "chain A closed in the same tx");
+        _deliverRecorded(uint256(keccak256("tx:panic")));
+
+        assertEq(sys.callbackCount(), 1, "one relay, to chain B");
+        MockSystemContract.CallbackReq memory cb = sys.callbackAt(0);
+        assertEq(cb.chainId, chainB);
+        assertEq(cb.recipient, address(execB));
+        uint256 usdcBefore = usdc.balanceOf(alice);
+        assertTrue(_deliverCallbackReq(cb));
+        assertEq(uint8(execB.getRule(b1).status), uint8(RuleStatus.EXECUTED), "chain B closed by Reactive");
+        assertGt(usdc.balanceOf(alice), usdcBefore, "and alice was paid on chain B");
     }
 
     function test_unlockCallback_onlyPoolManager() public {

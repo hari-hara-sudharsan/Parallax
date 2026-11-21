@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
 
+import {TwoStepOwnable} from "../src/base/TwoStepOwnable.sol";
 import {Test} from "forge-std/Test.sol";
 import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {AbstractPayer} from "reactive-lib-omni/base/AbstractPayer.sol";
@@ -97,19 +98,23 @@ contract ParallaxReactiveTest is Test {
         assertEq(reactive.RULE_SKIPPED_TOPIC0(), uint256(IParallaxExecutor.RuleSkipped.selector));
         assertEq(reactive.RULE_UPDATED_TOPIC0(), uint256(IParallaxExecutor.RuleUpdated.selector));
         assertEq(reactive.RULE_SETTLED_TOPIC0(), uint256(IParallaxExecutor.RuleSettled.selector));
+        assertEq(reactive.PANIC_REQUESTED_TOPIC0(), uint256(IParallaxExecutor.PanicRequested.selector));
+        assertEq(reactive.PANIC_EXECUTED_TOPIC0(), uint256(IParallaxExecutor.PanicExecuted.selector));
         assertEq(reactive.SWAP_TOPIC0(), 0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f);
     }
 
     function test_addChain_subscribesToAllRuleEvents() public view {
-        uint256[6] memory topics = [
+        uint256[8] memory topics = [
             reactive.RULE_CREATED_TOPIC0(),
             reactive.RULE_CANCELLED_TOPIC0(),
             reactive.RULE_EXECUTED_TOPIC0(),
             reactive.RULE_SKIPPED_TOPIC0(),
             reactive.RULE_UPDATED_TOPIC0(),
-            reactive.RULE_SETTLED_TOPIC0()
+            reactive.RULE_SETTLED_TOPIC0(),
+            reactive.PANIC_REQUESTED_TOPIC0(),
+            reactive.PANIC_EXECUTED_TOPIC0()
         ];
-        for (uint256 i; i < 6; ++i) {
+        for (uint256 i; i < 8; ++i) {
             assertTrue(
                 sys.subscribed(address(reactive), CHAIN, EXECUTOR, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE)
             );
@@ -121,11 +126,92 @@ contract ParallaxReactiveTest is Test {
         reactive.addChain(CHAIN, POOL_MANAGER, address(1));
 
         vm.prank(address(0xBAD));
-        vm.expectRevert(ParallaxReactive.NotOwner.selector);
+        vm.expectRevert(TwoStepOwnable.NotOwner.selector);
         reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
 
         vm.expectRevert(ParallaxReactive.ZeroAddress.selector);
         reactive.addChain(OTHER_CHAIN, address(0), OTHER_EXECUTOR);
+    }
+
+    /// @dev A leaked owner key can be retired: propose, accept from the new key, and the old key loses all power.
+    function test_ownership_twoStepTransfer() public {
+        address next = address(0xC0FFEE);
+        vm.prank(address(0xBAD));
+        vm.expectRevert(TwoStepOwnable.NotOwner.selector);
+        reactive.transferOwnership(next);
+
+        reactive.transferOwnership(next);
+        assertEq(reactive.owner(), address(this), "nothing changes until accepted");
+        vm.prank(address(0xBAD));
+        vm.expectRevert(TwoStepOwnable.NotPendingOwner.selector);
+        reactive.acceptOwnership();
+
+        vm.prank(next);
+        reactive.acceptOwnership();
+        assertEq(reactive.owner(), next);
+        assertEq(reactive.pendingOwner(), address(0));
+
+        vm.expectRevert(TwoStepOwnable.NotOwner.selector); // the old owner is locked out
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+        vm.prank(next);
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+    }
+
+    // ── Panic Exit ──────────────────────────────────────────────────────────
+
+    function _panicLog(uint256 chainId, address emitter, uint256 topic0, address owner_, uint256 closed, uint256 remaining)
+        internal
+        pure
+        returns (IReactive.LogRecord memory r)
+    {
+        r = _log(emitter, 2, topic0, uint160(owner_), 0, 0, abi.encode(closed, remaining));
+        r.chainId = chainId;
+    }
+
+    /// @dev A panic on one chain is relayed to every OTHER chain, as a panicExit for the same owner.
+    function test_panic_relaysToEveryOtherChain() public {
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+        address alice = address(0xA11CE);
+        _react(_panicLog(CHAIN, EXECUTOR, reactive.PANIC_REQUESTED_TOPIC0(), alice, 2, 0));
+
+        assertEq(sys.callbackCount(), 1, "one relay: the panicking chain already closed its own rules");
+        MockSystemContract.CallbackReq memory c = sys.callbackAt(0);
+        assertEq(c.chainId, OTHER_CHAIN);
+        assertEq(c.recipient, OTHER_EXECUTOR);
+        assertEq(c.gasLimit, reactive.PANIC_GAS_LIMIT());
+        assertEq(c.payload, abi.encodeCall(IParallaxExecutor.panicExit, (address(0), alice)));
+    }
+
+    function test_panic_continuesWhileRulesRemain_thenStops() public {
+        address alice = address(0xA11CE);
+        _react(_panicLog(CHAIN, EXECUTOR, reactive.PANIC_EXECUTED_TOPIC0(), alice, 6, 3));
+        assertEq(sys.callbackCount(), 1, "3 rules left: ask the same chain again");
+        assertEq(sys.callbackAt(0).chainId, CHAIN);
+        assertEq(sys.callbackAt(0).payload, abi.encodeCall(IParallaxExecutor.panicExit, (address(0), alice)));
+
+        _react(_panicLog(CHAIN, EXECUTOR, reactive.PANIC_EXECUTED_TOPIC0(), alice, 3, 0));
+        assertEq(sys.callbackCount(), 1, "nothing left: stop");
+        _react(_panicLog(CHAIN, EXECUTOR, reactive.PANIC_EXECUTED_TOPIC0(), alice, 0, 4));
+        assertEq(sys.callbackCount(), 1, "a call that closed nothing does not loop");
+    }
+
+    function test_panic_onlyFromOurExecutor_andNeverReverts() public {
+        reactive.addChain(OTHER_CHAIN, OTHER_POOL_MANAGER, OTHER_EXECUTOR);
+        _react(_panicLog(CHAIN, address(0xBAD), reactive.PANIC_REQUESTED_TOPIC0(), address(0xA11CE), 1, 0));
+        assertEq(sys.callbackCount(), 0, "a look-alike PanicRequested from another contract is ignored");
+
+        IReactive.LogRecord memory bad = _panicLog(CHAIN, EXECUTOR, reactive.PANIC_EXECUTED_TOPIC0(), address(1), 0, 0);
+        bad.data = hex"01"; // malformed
+        _react(bad);
+        assertEq(sys.callbackCount(), 0);
+    }
+
+    function test_addChain_capsChains() public {
+        for (uint256 i = 1; i < reactive.MAX_CHAINS(); ++i) {
+            reactive.addChain(10_000 + i, address(uint160(0x1000 + i)), address(uint160(0x2000 + i)));
+        }
+        vm.expectRevert(ParallaxReactive.TooManyChains.selector);
+        reactive.addChain(99_999, address(0x3000), address(0x4000));
     }
 
     function test_react_onlySystem() public {

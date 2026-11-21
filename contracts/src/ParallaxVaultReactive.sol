@@ -6,6 +6,7 @@ import {IReactive} from "reactive-lib-omni/interfaces/IReactive.sol";
 import {ISystemContract} from "reactive-lib-omni/interfaces/ISystemContract.sol";
 
 import {ParallaxVault} from "./ParallaxVault.sol";
+import {TwoStepOwnable} from "./base/TwoStepOwnable.sol";
 
 /// @title ParallaxVaultReactive
 /// @notice The brain of ParallaxVault, running on Reactive Network. It watches every Swap in the vault's
@@ -17,8 +18,7 @@ import {ParallaxVault} from "./ParallaxVault.sol";
 ///         It mirrors the vault's state from its events, so it never fires the same action twice while a
 ///         callback is in flight. The vault re-checks every condition on-chain.
 /// @dev Never reverts inside `react()` to filter (reverts are billed). Gas is bounded: 8 observations.
-contract ParallaxVaultReactive is AbstractReactive {
-    error NotOwner();
+contract ParallaxVaultReactive is AbstractReactive, TwoStepOwnable {
     error AlreadyConfigured();
     error ZeroAddress();
 
@@ -50,7 +50,6 @@ contract ParallaxVaultReactive is AbstractReactive {
     uint256 internal constant OBS = 8;
 
     // ── Config ──────────────────────────────────────────────────────────────
-    address public immutable owner;
     uint256 public immutable ORIGIN_CHAIN_ID;
     address public immutable POOL_MANAGER;
     bytes32 public immutable POOL_ID;
@@ -85,7 +84,6 @@ contract ParallaxVaultReactive is AbstractReactive {
         uint32 calmSeconds_
     ) payable {
         if (poolManager_ == address(0)) revert ZeroAddress();
-        owner = msg.sender;
         ORIGIN_CHAIN_ID = originChainId_;
         POOL_MANAGER = poolManager_;
         POOL_ID = poolId_;
@@ -96,8 +94,7 @@ contract ParallaxVaultReactive is AbstractReactive {
 
     /// @notice One-time wiring after the vault is deployed (the vault stores this contract's address).
     ///         Subscribes to the vault's lifecycle events and to Swap events of its pool.
-    function setVault(address vault_) external {
-        if (msg.sender != owner) revert NotOwner();
+    function setVault(address vault_) external onlyOwner {
         if (vault != address(0)) revert AlreadyConfigured();
         if (vault_ == address(0)) revert ZeroAddress();
         vault = vault_;
@@ -114,8 +111,7 @@ contract ParallaxVaultReactive is AbstractReactive {
         _coverDebt();
     }
 
-    function withdraw(address payable to, uint256 amount) external {
-        if (msg.sender != owner) revert NotOwner();
+    function withdraw(address payable to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
         to.transfer(amount);
     }

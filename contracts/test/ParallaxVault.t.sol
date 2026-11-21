@@ -204,9 +204,11 @@ contract ParallaxVaultTest is Test {
     }
 
     function test_deposit_sharesProRataAndWithdrawReturnsValue() public {
-        _deposit(alice, 1 ether, 3000e6);
+        uint256 aliceShares = _deposit(alice, 1 ether, 3000e6);
+        // Shares follow the vault's holdings, limited by the scarcer token (not the pool price).
+        uint256 expected = _proportionalShares(2 ether, 6000e6);
         uint256 bobShares = _deposit(bob, 2 ether, 6000e6);
-        assertApproxEqRel(bobShares, 2 * vault.balanceOf(alice), 0.01e18);
+        assertApproxEqRel(bobShares, expected, 0.0001e18);
 
         uint256 valueBefore = vault.totalValue0();
         uint256 w0 = weth.balanceOf(bob);
@@ -214,11 +216,68 @@ contract ParallaxVaultTest is Test {
         vm.prank(bob);
         vault.withdraw(bobShares);
         assertEq(vault.balanceOf(bob), 0);
-        // Bob got back ~2/3 of the vault's value (as some mix of both tokens).
+        // Bob got back his pro-rata share of the vault (as some mix of both tokens).
         uint256 gotW = weth.balanceOf(bob) - w0;
         uint256 gotU = usdc.balanceOf(bob) - u0;
         assertGt(gotW + gotU, 0);
-        assertApproxEqRel(vault.totalValue0(), valueBefore / 3, 0.02e18);
+        assertApproxEqRel(vault.totalValue0(), valueBefore * aliceShares / (aliceShares + bobShares), 0.02e18);
+    }
+
+    /// @dev Sandwich: move the price, deposit, move it back, withdraw. Shares are minted in proportion to the
+    ///      vault's holdings (no price involved), so the attacker cannot come out ahead of what they put in.
+    function test_deposit_sandwichGainsNothing() public {
+        _deposit(alice, 5 ether, 15_000e6);
+        address attacker = bob;
+
+        _swap(true, 20 ether); // crash WETH right before depositing
+        (uint256 w0, uint256 u0) = (weth.balanceOf(attacker), usdc.balanceOf(attacker));
+        uint256 shares = _deposit(attacker, 20 ether, 60_000e6);
+        (uint256 wIn, uint256 uIn) = (w0 - weth.balanceOf(attacker), u0 - usdc.balanceOf(attacker));
+        _swap(false, 60_000e6); // and move it back
+
+        (uint256 w1, uint256 u1) = (weth.balanceOf(attacker), usdc.balanceOf(attacker));
+        vm.prank(attacker);
+        vault.withdraw(shares);
+        (uint256 wOut, uint256 uOut) = (weth.balanceOf(attacker) - w1, usdc.balanceOf(attacker) - u1);
+
+        // Value both legs at the price after the attack, in USDC.
+        (uint160 sqrtP,,,) = PM.getSlot0(key.toId());
+        uint256 px = _usdcPerWeth(sqrtP);
+        uint256 valueIn = uIn + wIn * px / 1e18;
+        uint256 valueOut = uOut + wOut * px / 1e18;
+        assertLe(valueOut, valueIn + valueIn / 1000, "no profit beyond 0.1% rounding");
+    }
+
+    /// @dev Only the proportional part of a lopsided deposit is pulled; the rest stays with the depositor.
+    function test_deposit_pullsOnlyProportionalAmounts() public {
+        _deposit(alice, 1 ether, 3000e6);
+        (uint256 t0, uint256 t1) = vault.totalAmounts();
+        uint256 supply = vault.totalSupply();
+        (uint256 w0, uint256 u0) = (weth.balanceOf(bob), usdc.balanceOf(bob));
+        uint256 shares = _deposit(bob, 1 ether, 1_000_000e6); // far too much USDC for 1 WETH
+        uint256 usedW = w0 - weth.balanceOf(bob);
+        uint256 usedU = u0 - usdc.balanceOf(bob);
+        assertLe(usedW, 1 ether);
+        assertLt(usedU, 100_000e6, "only the matching USDC was pulled");
+        (uint256 tw, uint256 tu) = wethIs0 ? (t0, t1) : (t1, t0);
+        assertApproxEqRel(shares * 1e18 / supply, usedW * 1e18 / tw, 0.001e18, "shares match the WETH fraction");
+        assertApproxEqRel(shares * 1e18 / supply, usedU * 1e18 / tu, 0.001e18, "and the USDC fraction");
+    }
+
+    /// @dev USDC (6 dp) per 1 WETH (18 dp), from the pool price.
+    function _usdcPerWeth(uint160 sqrtP) internal view returns (uint256) {
+        uint256 p = FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), 1 << 96); // currency1 per currency0, X96
+        return wethIs0 ? FullMath.mulDiv(p, 1e18, 1 << 96) : FullMath.mulDiv(1 << 96, 1e18, p);
+    }
+
+    /// @dev Shares a deposit of (wethAmt, usdcAmt) should get: the smaller of the two holding fractions.
+    function _proportionalShares(uint256 wethAmt, uint256 usdcAmt) internal view returns (uint256) {
+        (uint256 t0, uint256 t1) = vault.totalAmounts();
+        (uint256 o0, uint256 o1) = wethIs0 ? (wethAmt, usdcAmt) : (usdcAmt, wethAmt);
+        uint256 supply = vault.totalSupply();
+        uint256 by0 = o0 * supply / t0;
+        uint256 by1 = o1 * supply / t1;
+        return by0 < by1 ? by0 : by1;
     }
 
     function test_withdrawAll_emptiesVault() public {

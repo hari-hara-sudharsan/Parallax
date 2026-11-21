@@ -82,4 +82,16 @@ interface IParallaxExecutor {
     /// @notice Callback: tighten a trailing stop to (current tick ∓ trailTicks). Verified on-chain: the
     ///         executor reads the live tick itself, so a stop can never be moved past what the price justifies.
     function raiseTrail(address reactiveSender, uint256 ruleId, int24 observedTick) external;
+
+    /// @notice The owner pressed Panic on this chain: their rules here were closed in the same transaction, and
+    ///         the reactive contract relays the panic to every other chain.
+    /// @param closed Rules closed by this call.
+    /// @param remaining Active rules the owner still has on this chain.
+    event PanicRequested(address indexed owner, uint256 closed, uint256 remaining);
+
+    /// @notice A relayed panic ran on this chain. If `remaining > 0` the reactive contract asks again.
+    event PanicExecuted(address indexed owner, uint256 closed, uint256 remaining);
+
+    /// @notice Callback: close all of `owner`'s rules on this chain (relayed from a panic on another chain).
+    function panicExit(address reactiveSender, address owner) external;
 }
