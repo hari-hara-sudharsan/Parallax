@@ -9,6 +9,18 @@ the event.
 
 ---
 
+## Status (2026-11-21)
+
+| Phase | State |
+|---|---|
+| A · Fix our gaps | ✅ pushed, ownership moved off the leaked key, Sourcify, CI + coverage, Slither triage, cost per loop |
+| B · Evidence | ✅ live refusals, CLAIMS.md, crash-money analysis, derived legacy column, costs, `cast` verify block |
+| C · Hardening tests | ✅ random-order invariants, debt-pause test, gas budgets, 34/34 mutants |
+| D · v5 contracts | ✅ Panic Exit, Tryout, resync, NOT_ACTIVE healing, TwoStepOwnable, vault v3 pro-rata · ✂️ cut: Cron retry (documented as a limitation), TP ladder, depeg |
+| E · v5 live proof | ✅ 132 Base / 42 Unichain / 70 keeper rounds, burst, cross-chain panic, fresh-wallet tryout |
+| F · Dashboard | ✅ tryout, ledger, refusal room, what-if slider, health, panic, speed-and-money; deployed to Vercel |
+| G · Docs and submit | ✅ README for judges, setup guide, tag `v5-submission` · ⏳ video and DoraHacks form (user), funding top-up before Dec 4 |
+
 ## What we take from the field
 
 | Idea | Seen in | What it becomes in Parallax | Phase |

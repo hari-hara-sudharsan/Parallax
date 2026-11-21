@@ -24,7 +24,7 @@ No bot, no server, no hot key, and nothing you run has to stay online.
 | 🧠 **Real reactive work** | The reactive contract holds the order book, decides what crossed, raises trailing stops, re-arms stale triggers and relays panics across chains |
 | 🎮 **Try it with only gas** | `ParallaxTryout`: `arm()` gives you a funded stop, `crash(id)` crosses it. Reactive does the rest (first live run filled in **6 blocks ≈ 1.2 s**) |
 | 🧪 **Tested to break** | **119 Foundry tests** (fork tests on live v4, invariant fuzzing with lost and reordered events), guards checked by [mutation testing](results/mutants.md), [CI](.github/workflows/test.yml), 93% line coverage, Slither triaged, every contract **Sourcify-verified** |
-| 🖥️ **Dashboard** | **[parallax-kappa-six.vercel.app](https://parallax-kappa-six.vercel.app)**: open the app, connect MetaMask on Base Sepolia, arm a stop, press "Crash the price" |
+| 🖥️ **Dashboard** | **[parallax-kappa-six.vercel.app](https://parallax-kappa-six.vercel.app)**: open the app, connect MetaMask on Base Sepolia, then **Run a loop yourself → Arm → Crash** (only gas needed) |
 
 ### For judges: where each criterion is answered
 
@@ -256,9 +256,10 @@ Every tx for each run: [`deployments/tx-proofs.md`](deployments/tx-proofs.md).
 
 | Guarantee | How | Evidence |
 |---|---|---|
-| Only Reactive can trigger execution | `execute` / `raiseTrail` require `msg.sender == Callback Proxy` (`onlyServiceProvider`) **and** that the proxy-injected sender is our reactive contract (`onlyCallbackSender`). The library's sender check alone doesn't verify `msg.sender`, so we use both. | Foundry auth tests |
-| A stale trigger can't force a bad sale | The executor re-reads the pool tick and re-evaluates the rule. If the price bounced back, it emits `RuleSkipped` and Reactive re-arms the rule. | Tests + live re-arm path |
-| Never executes twice | Rules are single-shot; a repeat emits `RuleSkipped(NOT_ACTIVE)` | Tests |
+| Only Reactive can trigger execution | `execute` / `raiseTrail` require `msg.sender == Callback Proxy` (`onlyServiceProvider`) **and** that the proxy-injected sender is our reactive contract (`onlyCallbackSender`). The library's sender check alone doesn't verify `msg.sender`, so we use both. | Tests + [live revert](results/REFUSALS.md) |
+| A stale trigger can't force a bad sale | The executor re-reads the pool tick and re-evaluates the rule. If the price bounced back, it emits `RuleSkipped` and Reactive re-arms the rule. | Tests + [live skip → re-arm → fill](results/REFUSALS.md) |
+| Never executes twice | Rules are single-shot; a repeat emits `RuleSkipped(NOT_ACTIVE)` | Tests + [live: 2 crossing swaps, 1 sale](results/REFUSALS.md) |
+| Ignores moves that don't cross | Reactive reacts to every swap but requests a callback only when the tick crosses the line | [Live in-band swap](results/REFUSALS.md) |
 | Slippage-capped | Floors come from the live spot price (swaps) or from the exact out-of-range amounts (LP withdrawals) | Tests |
 | Trailing stops can't be moved too far | A raise is computed from the **live** tick, so a stop never moves further than the price justifies | Live v4.1 run |
 | Benign failures don't revert | A reverted callback is still billed and is invisible to the reactive side, so the executor reports misses as events instead | Design + tests |
@@ -266,7 +267,8 @@ Every tx for each run: [`deployments/tx-proofs.md`](deployments/tx-proofs.md).
 | Bounded gas | ≤ 25 rules per pool, ≤ 3 callbacks per swap; the re-centre's gas is asserted to fit its callback budget | Tests |
 | Timers use time, not blocks | `block.timestamp` for every window and timeout (Base produces a block every 200 ms) | Code |
 
-**Tests and static analysis:** 93 Foundry tests, **93% line / 75% branch coverage**
+**Tests and static analysis:** 119 Foundry tests including random-order invariant fuzzing, **34/34 mutants killed**
+([`results/mutants.md`](results/mutants.md)), **93% line / 75% branch coverage**
 ([`results/coverage.md`](results/coverage.md)), run in CI on every push. Slither reports 73 results, none exploitable;
 each is triaged in [`results/slither-triage.md`](results/slither-triage.md).
 
@@ -329,10 +331,13 @@ cd web && npm install && npm run dev   # dashboard on http://localhost:3000
   per full loop, a negligible amount of ETH per callback ([`results/costs.md`](results/costs.md)).
 - **Events sent during a debt pause are lost, not queued.** Our fuzzing found what that does to v4.1: a missed
   `RuleExecuted` makes a dead rule refire on every swap, and a missed `RuleCreated` means a rule never fires. The fix
-  is in `main` and ships with v5: the reactive contract drops a rule when the executor answers `NOT_ACTIVE`, and
+  is live in v5 and was exercised on-chain (`deployments/tx-proofs.md`): the reactive contract drops a rule when the executor answers `NOT_ACTIVE`, and
   anyone can call `executor.resync(ruleId)` after a pause to re-announce a rule's state.
-- **Vault deposits use the spot price.** A deposit is valued at the pool's current price, so a deposit sandwiched by
-  two swaps could mint extra shares. A time-weighted reference is planned (see the Slither triage).
+- **Vault deposits:** since vault v3, deposits mint shares pro rata to what the vault already holds, so a sandwiched
+  deposit can't mint extra shares. Only the very first deposit into an empty vault is priced at spot.
+- **Retries wait for the next swap.** If a callback fails or is skipped, the rule is marked pending for
+  `PENDING_TIMEOUT` (120 s) and re-checked on the first swap after that. There is no timer-driven retry, so on a pool
+  with no trading a stuck rule waits for the next trade (which is also the only moment its price can change).
 - **Vault scope:** one pool, one range width and fixed tuning (±3%, a 2% breaker, 60 s). A fast round trip can leave it
   behind a passive LP.
 
