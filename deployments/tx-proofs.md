@@ -5,6 +5,31 @@
 Each row is one complete, unattended Parallax execution on testnet. No keeper and no script triggered the callback:
 Reactive Network saw the origin event and did the rest. Reproduce any row with `./tw.sh proof <originTx>`.
 
+## v5 live: Panic Exit across two chains (2026-11-21)
+
+One `panic()` on Base Sepolia closed the owner's Base rule in that same transaction, and Reactive closed their
+Unichain rule as well. Reproduce: `FROM=base ./tw.sh panic`.
+
+| Step | Chain | Tx |
+|---|---|---|
+| Armed: rule 102 on Base, rule 1 on Unichain (each 0.5% from spot, both mirrored on Lasna) | Base / Unichain | — |
+| **① `panic()`**: rule 102 sold in the same tx (`PanicRequested`, closed 1) | Base | [`0xde2a4269…`](https://sepolia.basescan.org/tx/0xde2a42698358dc2b8add33d2794aeb6859aea32c8df0173d105e19e612f11087) |
+| **② Reactive** `PanicRelayed` → `panicExit` callback to Unichain | Lasna | [`0xae6d0610…`](https://lasna.reactscan.net/tx/0xae6d061036b26aad1708aa56062454211e01762308b33be93a2aac8b4f53774e) |
+| **③ Unichain closed** rule 1 (`PanicExecuted`, closed 1) | Unichain | [`0x1322a0ef…`](https://sepolia.uniscan.xyz/tx/0x1322a0efe4120e3b10b4de8226e54747bb2bcf0dfe6ab5634c4ac92267408fda) · **3 s** after the panic block (6.2 s wall clock) |
+
+## v5 live: recovering from a debt pause with `resync` (2026-11-21)
+
+The 100-round benchmark ran the reactive contract out of lREACT at round 95 (94/100 filled; the last 6 timed out
+waiting for the mirror). While it was in debt, Reactive did not deliver rule 95's `RuleExecuted`, so Lasna still
+mirrored an executed rule and kept paying for the pool's swaps: the exact failure our fuzzing found in v4.1. After
+paying the debt ([`0xdcc3416e…`](https://lasna.reactscan.net/tx/0xdcc3416ef2753913fbe16a596a8e591aa5aa78ea4298058a12ce389d51a1c7e7)),
+anyone can repair it:
+
+| Step | Chain | Tx |
+|---|---|---|
+| `executor.resync(95)` → `RuleSettled(95, EXECUTED)` | Base | [`0x0a049f4b…`](https://sepolia.basescan.org/tx/0x0a049f4bc41c4fdbf124838f1964488fa227511e4646d7154a615e2f61db37ae) |
+| Lasna drops the stale rule (`RuleRemoved`) and unsubscribes the empty pool (`PoolUnwatched`) in one reactive tx | Lasna | [`0xa372aadb…`](https://lasna.reactscan.net/tx/0xa372aadb27d730f4fa5f139d4b102535be1ec51ddaf27db0784d494f91fb66ed) |
+
 ## v5 live: the zero-setup judge path (Base Sepolia, 2026-11-21)
 
 `ParallaxTryout` armed a funded stop for a wallet holding only gas, then crashed the price just past it. Reactive did

@@ -15,7 +15,7 @@ No bot, no server, no hot key, and nothing you run has to stay online.
 
 | | |
 |---|---|
-| ⚡ **Speed** | **Median 7 Base blocks ≈ 1.4 s** from the price-crossing swap to the executed sell (p90 2.0 s, fastest 1.0 s) |
+| ⚡ **Speed** | **Median 7 Base blocks ≈ 1.4 s** from the price-crossing swap to the executed sell (p90 2.0 s, fastest 0.8 s) over **174 live rounds** on two chains, every tx hash published |
 | 💰 **Why seconds matter** | Replaying the 10 Oct 2025 crash, a 1.4 s fill keeps **$325 per $100k** at the worst 5% of seconds vs the same loop on legacy Reactive ([method](results/what-a-second-buys.md)) |
 | 🤖 **vs a keeper bot** | Same pool, same crossing swap: a 250 ms-polling bot with a warm RPC needs **10 blocks ≈ 2.0 s**. Parallax is **~30% faster** and needs no infrastructure |
 | 🚨 **Panic Exit** | One transaction on either chain closes every rule you have, there, and Reactive closes the rest on the other chain |
@@ -96,7 +96,7 @@ answered with a callback:
 
 ```
 Swap on Base ──▶ react() on Lasna ──▶ callback executes on Base
-   T0                ~1 s                 T0 + 1.4 s (median, measured over 32 rounds)
+   T0                ~1 s                 T0 + 1.4 s (median, measured over 126 filled rounds)
 ```
 
 With this speed, keeperless protection beats a well-run bot instead of trailing it. And there is nothing for the user
@@ -193,8 +193,14 @@ crossing swap → wait for the callback → read the executor's on-chain `Execut
 
 | Chain | Block time | Rounds | Filled | Median | p90 | Fastest |
 |---|---|---|---|---|---|---|
-| **Base Sepolia** | 200 ms | 32 | **32/32** | **7 blocks ≈ 1.4 s** | 10 blocks ≈ 2.0 s | 5 blocks ≈ 1.0 s |
-| **Unichain Sepolia** | 1 s | 12 | **12/12** | 2 blocks ≈ 2.0 s | 3 blocks ≈ 3.0 s | 2 blocks |
+| **Base Sepolia** | 200 ms | 132 | **126/132** | **7 blocks ≈ 1.4 s** | 10 blocks ≈ 2.0 s (p99 15) | 4 blocks ≈ 0.8 s |
+| **Unichain Sepolia** | 1 s | 42 | **42/42** | 2 blocks ≈ 2.0 s | 3 blocks ≈ 3.0 s | 2 blocks |
+
+Two deployments, two days: 44 rounds on v3 (15 Nov, all filled) and 130 on v5 (21 Nov). The **6 misses are one
+event**: we funded the v5 reactive contract for about 94 loops and it ran out of lREACT at round 95, so Reactive
+stopped calling it. No round failed in the protocol, and the pause itself became a live proof of the v5 recovery
+path (`resync`, see [`deployments/tx-proofs.md`](deployments/tx-proofs.md)). The v5 run alone matches v3: median
+7 blocks, p90 10.
 
 Block counts are exact, because they are read from contract storage. Wall-clock figures in the full table are upper
 bounds, since they come from polling public RPCs. Every round, with explorer links:
@@ -208,8 +214,10 @@ the same stop on the same pool, triggered by the same crossing swap:
 
 | Base Sepolia | Rounds | Filled | Blocks p50 / p90 / min | Seconds p50 |
 |---|---|---|---|---|
-| **Parallax (on-chain, no bot)** | 32 | 32/32 | **7 / 10 / 5** | **1.4 s** |
-| Keeper bot (off-chain) | 20 | 20/20 | 10 / 11 / 8 | 2.0 s |
+| **Parallax (on-chain, no bot)** | 132 | 126/132 | **7 / 10 / 4** | **1.4 s** |
+| Keeper bot (off-chain) | 70 | 70/70 | 10 / 11 / 8 | 2.0 s |
+
+The bot was run twice, six days apart (20 and 50 rounds), and landed on the same p50 / p90 / min both times.
 
 Parallax was faster **and** removed the server, the hot key and the uptime risk. The benchmark doesn't model the bot's
 real-world failures (downtime, gas spikes, skipped orders), so the real gap is larger.

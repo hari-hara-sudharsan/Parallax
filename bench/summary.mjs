@@ -62,6 +62,32 @@ export function writeSummary(dir) {
     if (sb.length) derived.push([chain, pct(sb, 50), pct(sb, 90)]);
   }
 
+  // Per run, so different deployments are never blended, with every failure reason spelled out.
+  const files = [...new Set(rows.map((r) => r.file))].sort();
+  lines.push(
+    "",
+    "### Each run on its own",
+    "",
+    "| Run | Chain | Rounds | Filled | Blocks p50 / p90 / max | Failures |",
+    "|---|---|---|---|---|---|",
+  );
+  for (const file of files) {
+    const rs = rows.filter((r) => r.file === file);
+    const ok = rs.filter((r) => r.ok);
+    const b = ok.map((r) => r.latencyBlocks);
+    const reasons = [...new Set(rs.filter((r) => !r.ok).map((r) => r.error))];
+    lines.push(
+      `| \`${file}\` | ${rs[0].chain} | ${rs.length} | ${ok.length}/${rs.length} | ` +
+        `${pct(b, 50) ?? "–"} / ${pct(b, 90) ?? "–"} / ${b.length ? Math.max(...b) : "–"} | ${reasons.length ? reasons.join("; ") : "none"} |`,
+    );
+  }
+  lines.push(
+    "",
+    "The 2026-11-21 Base run (v5 contracts) stopped filling at round 95: we funded the reactive contract for about 94",
+    "loops and it ran out of lREACT. Nothing failed in the protocol; the pause and the `resync` recovery that followed",
+    "are documented in `deployments/tx-proofs.md`.",
+  );
+
   // Derived, not measured: swap Lasna's ~1 s block for the legacy ~7 s block. A transaction waits for the next
   // reactive block, uniformly between 0 and one block, so on average +3 s and at worst +6 s over what we measured.
   if (derived.length) {

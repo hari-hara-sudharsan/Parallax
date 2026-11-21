@@ -1,0 +1,26 @@
+{
+  "ranAt": "2026-11-21T09:54:07.685Z",
+  "from": "base",
+  "to": "unichain",
+  "reactive": "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3",
+  "armed": {
+    "base": {
+      "ruleId": 102,
+      "tx": "0x72ffaf83550b6868ff8b51d095a23fb6cdecac5293fcd3411e23b95287c69b11"
+    },
+    "unichain": {
+      "ruleId": 1,
+      "tx": "0x6546b3985ef3a53af04d713cb200b79692926dc73a3b184d26a24de583051e8e"
+    }
+  },
+  "panicTx": "0xde2a42698358dc2b8add33d2794aeb6859aea32c8df0173d105e19e612f11087",
+  "closedHere": 1,
+  "fromRuleStatus": 2,
+  "reactiveTx": "0xae6d061036b26aad1708aa56062454211e01762308b33be93a2aac8b4f53774e",
+  "remoteTx": "0x1322a0efe4120e3b10b4de8226e54747bb2bcf0dfe6ab5634c4ac92267408fda",
+  "closedThere": 1,
+  "toRuleStatus": 2,
+  "crossChainSecondsByTimestamp": 3,
+  "wallClockMs": 6175,
+  "ok": true
+}
