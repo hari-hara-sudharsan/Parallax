@@ -1,0 +1,42 @@
+# Builds the contracts and runs every Foundry test on each push and pull request.
+# The fork tests (ParallaxFork.t.sol) read live Uniswap v4 on Unichain Sepolia over its public RPC; no keys needed.
+name: Contracts
+
+on:
+  push:
+    branches: [main]
+    paths: ["contracts/**", ".github/workflows/test.yml"]
+  pull_request:
+    paths: ["contracts/**", ".github/workflows/test.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    env:
+      UNICHAIN_SEPOLIA_RPC: https://sepolia.unichain.org
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build
+        run: forge build --sizes
+
+      - name: Test (unit + live v4 fork)
+        # Public RPCs occasionally rate-limit; retry once before failing.
+        run: forge test -vv || (sleep 20 && forge test -vv)
+
+      - name: Coverage summary
+        run: |
+          # --ir-minimum: coverage compiles without the optimizer, which hits stack-too-deep in the v4 helpers.
+          forge coverage --ir-minimum --report summary --no-match-coverage "(test|script|lib)/" | tee coverage.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; cat coverage.txt >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"

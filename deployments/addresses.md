@@ -90,6 +90,26 @@ Deployer: `0xACf40822E48ddb5f5220d37beb7d6830dD2DEEb3`. **v3** (Week 1) is multi
 layout changed, so both contracts were redeployed and linked with `setExecutor` ([`0x011d29eb…a191821a`](https://lasna.reactscan.net/tx/0x011d29eb8f7a17bc17fc74065d1196d7cd43f9c4aa75d5e882bb8620a191821a)). (ParallaxReactive and MockWETH share an address because each was the
 deployer's first contract (nonce 0) on its own chain.)
 
+## Source verification (Sourcify, exact match)
+
+Every live contract is verified with an **exact match** (creation and runtime bytecode plus metadata). Checked
+2026-11-21.
+
+| Contract | Chain | Sourcify |
+|---|---|---|
+| ParallaxReactive v4.1 | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0xDf554201dec784F0541FA5fc884240c73113e334) |
+| ParallaxExecutor v4.1 | Base Sepolia 84532 | [exact match](https://repo.sourcify.dev/84532/0x2f772766ec926359093FA2d478FBDdcd828304Ff) |
+| ParallaxExecutor v4.1 | Unichain Sepolia 1301 | [exact match](https://repo.sourcify.dev/1301/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
+| ParallaxVaultReactive v2 | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24) |
+| ParallaxVault v2 | Base Sepolia 84532 | [exact match](https://repo.sourcify.dev/84532/0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F) |
+| mWETH / mUSDC | Base Sepolia 84532 | [mWETH](https://repo.sourcify.dev/84532/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) · [mUSDC](https://repo.sourcify.dev/84532/0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c) |
+| mWETH / mUSDC | Unichain Sepolia 1301 | [mWETH](https://repo.sourcify.dev/1301/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) · [mUSDC](https://repo.sourcify.dev/1301/0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c) |
+
+Both executors were deployed from commit `2cf2e9e`, before the vault refactor moved the liquidity helpers into
+`src/base/V4LiquidityOps.sol`, so they verify from that commit, not from `main`. Everything else verifies from `main`.
+To re-check one: `forge verify-contract --verifier sourcify --chain <id> <address> <path>:<Name> --constructor-args <hex>`
+(constructor arguments are in `contracts/broadcast/<script>/<chainId>/run-latest.json`).
+
 ## Parallax Vault (deployed 2026-11-15)
 
 | Contract | Chain | Address | Notes |

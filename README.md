@@ -1,5 +1,7 @@
 # Parallax
 
+[![Contracts](https://github.com/hari-hara-sudharsan/Parallax/actions/workflows/test.yml/badge.svg)](https://github.com/hari-hara-sudharsan/Parallax/actions/workflows/test.yml)
+
 ### A guard that watches your Uniswap v4 position from a parallel chain, and acts within about 1.4 seconds.
 
 Set a stop-loss, take-profit, trailing stop or LP range guard once. A reactive contract on **Reactive Omni** watches
@@ -190,6 +192,10 @@ Every tx for each run: [`deployments/tx-proofs.md`](deployments/tx-proofs.md).
 | Bounded gas | ≤ 25 rules per pool, ≤ 3 callbacks per swap; the re-centre's gas is asserted to fit its callback budget | Tests |
 | Timers use time, not blocks | `block.timestamp` for every window and timeout (Base produces a block every 200 ms) | Code |
 
+**Tests and static analysis:** 93 Foundry tests, **93% line / 75% branch coverage**
+([`results/coverage.md`](results/coverage.md)), run in CI on every push. Slither reports 73 results, none exploitable;
+each is triaged in [`results/slither-triage.md`](results/slither-triage.md).
+
 **Bugs we found live, and fixed:**
 - On v4, a trailing-stop raise ran out of gas: its 200k limit left only 24,023 gas after the Callback Proxy's reserve.
   v4.1 raises the limit to 500k and adds a regression test that replays that exact budget. Verified live.
@@ -197,6 +203,9 @@ Every tx for each run: [`deployments/tx-proofs.md`](deployments/tx-proofs.md).
   (`test_crashAfterQuietSpell_stillEvacuates`), and v2 evacuated on the first try.
 
 ## 7. Deployed contracts (testnet)
+
+All live contracts are **source-verified on Sourcify with an exact match**:
+[verification table](deployments/addresses.md#source-verification-sourcify-exact-match).
 
 | Contract | Chain | Address |
 |---|---|---|
@@ -240,6 +249,8 @@ cd web && npm install && npm run dev   # dashboard on http://localhost:3000
   price, so each executor acts only on its own chain's pool. One reactive contract still serves both chains.
 - **Funding is real.** The reactive contract pays lREACT per reactive tx and each executor pays ETH per callback. Any
   debt pauses service, which is how Reactive Network is designed.
+- **Vault deposits use the spot price.** A deposit is valued at the pool's current price, so a deposit sandwiched by
+  two swaps could mint extra shares. A time-weighted reference is planned (see the Slither triage).
 - **Vault scope:** one pool, one range width and fixed tuning (±3%, a 2% breaker, 60 s). A fast round trip can leave it
   behind a passive LP.
 
