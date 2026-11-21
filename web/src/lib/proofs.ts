@@ -36,7 +36,9 @@ export type StoredVaultAction = {
 
 export const PROOFS = data as unknown as { updated: string; executions: StoredExecution[]; bench: StoredExecution[]; vault: StoredVaultAction[] };
 
-export const storedExecution = (chain: ChainKey, ruleId: bigint) =>
-  PROOFS.executions.find((e) => e.chain === chain && BigInt(e.ruleId) === ruleId);
+/** The live executors are v5; rule ids restart at 1 per deployment, so the version must match too. */
+export const LIVE_VERSION = "v5";
+export const storedExecution = (chain: ChainKey, ruleId: bigint, version = LIVE_VERSION) =>
+  PROOFS.executions.find((e) => e.chain === chain && BigInt(e.ruleId) === ruleId && e.version === version);
 export const storedVaultAction = (callbackTx: string) =>
   PROOFS.vault.find((v) => v.callbackTx.toLowerCase() === callbackTx.toLowerCase());

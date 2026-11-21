@@ -9,13 +9,24 @@ import { createPublicClient, decodeEventLog, defineChain, http, parseAbi, toHex 
 import { baseSepolia, unichainSepolia } from "viem/chains";
 
 const OUT = new URL("../src/lib/proofs.json", import.meta.url);
-const REACTIVE = "0xDf554201dec784F0541FA5fc884240c73113e334";
-const REACTIVE_BLOCK = 8399503n;
-const VAULT = { address: "0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F", block: 59098404n, brain: "0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24", brainBlock: 8404251n };
-const CHAINS = [
-  { key: "base", chain: baseSepolia, rpc: "https://sepolia.base.org", executor: "0x2f772766ec926359093FA2d478FBDdcd828304Ff", span: 200n },
-  { key: "unichain", chain: unichainSepolia, rpc: "https://sepolia.unichain.org", executor: "0x5F4159fEF569FbDe44C069751A57e38e97b1109D", span: 1000n },
+// Every deployment whose loops we keep. Rule ids restart at 1 per executor, so rows are keyed by version too.
+const DEPLOYMENTS = [
+  {
+    version: "v4.1", reactive: "0xDf554201dec784F0541FA5fc884240c73113e334", reactiveBlock: 8399503n,
+    executors: { base: "0x2f772766ec926359093FA2d478FBDdcd828304Ff", unichain: "0x5F4159fEF569FbDe44C069751A57e38e97b1109D" },
+  },
+  {
+    version: "v5", reactive: "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3", reactiveBlock: 8881285n,
+    executors: { base: "0x98f96fd0b1cb9B723157D3686446004EcA066982", unichain: "0x391eecF06CA701b891498040D1CEFed90d500030" },
+  },
 ];
+const VAULT = { address: "0x9c868A6e74a1D00cc0cD1524AED57c35515c4899", block: 61652690n, brain: "0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c", brainBlock: 8881631n };
+const CHAINS = [
+  { key: "base", chain: baseSepolia, rpc: "https://sepolia.base.org", span: 200n },
+  { key: "unichain", chain: unichainSepolia, rpc: "https://sepolia.unichain.org", span: 1000n },
+];
+// v4.1 rows predate versioned keys; keep their old key so re-runs never duplicate them.
+const rowKey = (version, chain, id) => (version === "v4.1" ? `${chain}:${id}` : `${version}:${chain}:${id}`);
 
 const lasna = createPublicClient({
   chain: defineChain({ id: 5318007, name: "Lasna", nativeCurrency: { name: "lREACT", symbol: "lREACT", decimals: 18 }, rpcUrls: { default: { http: ["https://lasna-rpc.rnk.dev/"] } } }),
@@ -35,17 +46,18 @@ const vaultEvents = parseAbi([
 ]);
 
 const prev = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : { executions: [], vault: [] };
-const known = new Map(prev.executions.map((e) => [`${e.chain}:${e.ruleId}`, e]));
+const known = new Map(prev.executions.map((e) => [rowKey(e.version, e.chain, e.ruleId), e]));
 const knownVault = new Map(prev.vault.map((v) => [v.callbackTx, v]));
 
 // The benchmark rounds (bench/bench.mjs, v3 contracts) were read from chain when they ran; fold them in as-is.
 const RESULTS = new URL("../../results/", import.meta.url);
 const bench = [];
 for (const f of readdirSync(RESULTS).filter((f) => /^(base|unichain)-.*\.json$/.test(f))) {
+  const version = f.includes("2026-11-21") ? "v5" : "v3"; // the v5 rounds were all run on 21 Nov
   for (const r of JSON.parse(readFileSync(new URL(f, RESULTS), "utf8"))) {
     if (!r.callbackTx || !r.originTx) continue; // failed rounds stay in results/, not in the proof store
     bench.push({
-      source: "bench", version: "v3", chain: r.chain, ruleId: r.ruleId, kind: r.kind, originTx: r.originTx, originBlock: r.originBlock,
+      source: "bench", version, chain: r.chain, ruleId: r.ruleId, kind: r.kind, originTx: r.originTx, originBlock: r.originBlock,
       t0: r.originTimestamp, reactiveTx: r.reactiveTx ?? null, callbackTx: r.callbackTx, executedBlock: r.executedBlock, t1: r.executedAt,
       latencyBlocks: r.latencyBlocks,
     });
@@ -73,11 +85,14 @@ const lasnaLatest = await lasna.getBlockNumber().catch((e) => {
   return 0n;
 });
 
-for (const C of lasnaOk ? CHAINS : []) {
+for (const D of lasnaOk ? DEPLOYMENTS : []) for (const C0 of CHAINS) {
+  const C = { ...C0, executor: D.executors[C0.key] };
+  const REACTIVE = D.reactive;
+  const REACTIVE_BLOCK = D.reactiveBlock;
   const pub = createPublicClient({ chain: C.chain, transport: http(C.rpc) });
   const next = await pub.readContract({ address: C.executor, abi: executorAbi, functionName: "nextRuleId" });
   for (let id = 1n; id < next; id++) {
-    const key = `${C.key}:${id}`;
+    const key = rowKey(D.version, C.key, id);
     if (known.get(key)?.reactiveTx) continue; // complete rows never change
     const ex = await pub.readContract({ address: C.executor, abi: executorAbi, functionName: "executions", args: [id] });
     if (ex[2] === 0n) continue; // not executed
@@ -93,7 +108,7 @@ for (const C of lasnaOk ? CHAINS : []) {
     const hit = trig.find((t) => toHex(t.args.originTxHash, { size: 32 }) === originTx);
     known.set(key, {
       source: "live",
-      version: "v4.1",
+      version: D.version,
       chain: C.key,
       ruleId: Number(id),
       owner: log?.args.owner,
