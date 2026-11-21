@@ -92,7 +92,7 @@ const [execLog] = await pub.getContractEvents({ address: executor, abi: executor
 const trig = await lpub.getContractEvents({ address: reactive, abi: reactiveAbi, eventName: "RuleTriggered", args: { chainId: BigInt(C.chain.id), ruleId }, fromBlock: lasnaFrom });
 const originBlock = await pub.getBlock({ blockNumber: crashRc.blockNumber });
 const out = {
-  chain: chainName, ranAt: new Date().toISOString(), tryout, executor, reactive, ruleId: Number(ruleId),
+  chain: chainName, ranAt: new Date().toISOString(), visitor: account.address, tryout, executor, reactive, ruleId: Number(ruleId),
   armTx: armRc.transactionHash, originTx: crashRc.transactionHash, reactiveTx: trig[0]?.transactionHash, callbackTx: execLog?.transactionHash,
   recordedOrigin: toHex(exec[0], { size: 32 }), latencyBlocks: Number(exec[2] - crashRc.blockNumber),
   latencySeconds: Number(exec[3]) - Number(originBlock.timestamp),

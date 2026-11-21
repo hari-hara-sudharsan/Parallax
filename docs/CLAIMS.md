@@ -11,11 +11,11 @@ every transaction linked anywhere in the docs (198 of 198 found on 2026-11-21).
 
 | Claim | Proof | Where |
 |---|---|---|
-| Median **7 Base blocks ≈ 1.4 s** from the crossing swap to the executed sell (32 rounds) | tx, on-chain record | [`results/SUMMARY.md`](../results/SUMMARY.md): every round with its 3 hashes. Block counts are `executedBlock − originBlock` from the executor's own `Execution` storage. |
-| p90 10 blocks ≈ 2.0 s, fastest 5 blocks ≈ 1.0 s | tx | same table |
-| Unichain: median 2 blocks ≈ 2.0 s (12 rounds) | tx | same table |
-| 44 / 44 benchmark rounds filled | tx | same table |
-| A 250 ms-polling keeper bot on the same pool needs 10 blocks ≈ 2.0 s (20 rounds) | tx | `results/keeper-base-*.json`, summarised in `results/SUMMARY.md` |
+| Median **7 Base blocks ≈ 1.4 s** from the crossing swap to the executed sell (126 filled rounds, v3 + v5) | tx, on-chain record | [`results/SUMMARY.md`](../results/SUMMARY.md): every round with its 3 hashes. Block counts are `executedBlock − originBlock` from the executor's own `Execution` storage. |
+| p90 10 blocks ≈ 2.0 s, p99 15, fastest 4 blocks ≈ 0.8 s | tx | same table |
+| Unichain: median 2 blocks ≈ 2.0 s (42 rounds, 42 filled) | tx | same table |
+| 168 of 174 live rounds filled; the 6 misses are one funding stop, not a protocol failure | tx | "Each run on its own" in `results/SUMMARY.md` |
+| A 250 ms-polling keeper bot on the same pool needs 10 blocks ≈ 2.0 s (70 rounds, two runs six days apart, identical p50 / p90 / min) | tx | `results/keeper-base-*.json`, summarised in `results/SUMMARY.md` |
 | On legacy Reactive (~7 s blocks) the same loop would take ~4.4 s on average, ~7.4 s at worst | **derived** | `results/SUMMARY.md` ("Why it needs Omni"): our measured loop plus half / one legacy block. Nothing was run on legacy Reactive. |
 | In the worst 30 minutes of the 10 Oct 2025 crash, a 1.4 s fill keeps 32.5 bps at the p95 (~$325 per $100k) vs the derived legacy average | cmd | `python analysis/what_a_second_buys.py` → [`results/what-a-second-buys.md`](../results/what-a-second-buys.md). Binance data, SHA-256 checked. |
 
@@ -43,7 +43,7 @@ every transaction linked anywhere in the docs (198 of 198 found on 2026-11-21).
 | Slippage-capped | test | `test_execute_slippageExceeded_skipsAndKeepsDeposit` |
 | Bounded gas: ≤ 25 rules per pool, ≤ 3 callbacks per swap | test | `test_callbacksPerEventAreCapped`, `test_gas_fullPoolSwapStaysFarBelowReactiveCap`, `test_raiseTrail_fitsTheProxyGasBudget` |
 | Timers use `block.timestamp`, not block numbers | code | `PENDING_TIMEOUT` in `ParallaxReactive.sol`; the vault brain's windows |
-| 119 tests (93% line / 75% branch coverage at v4.1) | cmd | `./tw.sh test`; [`results/coverage.md`](../results/coverage.md); CI on every push |
+| 119 tests, 34 of 34 guard mutants killed (93% line / 75% branch coverage measured at v4.1) | cmd | `./tw.sh test`; [`results/coverage.md`](../results/coverage.md); CI on every push |
 | Slither: 73 results, none exploitable | cmd, doc | [`results/slither-triage.md`](../results/slither-triage.md) |
 | Every live contract is source-verified | cmd | Sourcify table in `deployments/addresses.md` |
 
@@ -54,9 +54,11 @@ every transaction linked anywhere in the docs (198 of 198 found on 2026-11-21).
 | One `panic()` closes all of the caller's rules on that chain in the same tx | test | `test_panic_closesEveryRuleHere`, `test_panic_onlyClosesYourOwnRules`, `test_panic_skipsSettledRules` |
 | Reactive relays the panic and the other chain's rules close too | test | `test_fullLoop_panicAcrossTwoChains` (second executor registered as a second chain, real recorded logs), `test_panic_relaysToEveryOtherChain` |
 | A sale that can't meet its slippage cap refunds the deposit instead | test | `test_panic_saleFails_refundsDeposit` |
+| Panic Exit works across chains live: the other chain closed 3 s after `panic()` | tx | "v5 live: Panic Exit" in `deployments/tx-proofs.md` |
+| A debt pause can be repaired live with `resync` | tx | "v5 live: recovering from a debt pause" in `deployments/tx-proofs.md` |
 | A panic is bounded and always fits its callback gas (6 closes ≈ 645k of 3M) | test | `test_panic_boundedPerCall_thenFinishes`, `test_panicExit_fitsItsCallbackGas`, `test_panic_continuesWhileRulesRemain_thenStops` |
 | `panicExit` is only callable by the Callback Proxy carrying our reactive contract | test | `test_panicExit_auth_andCloses` |
-| A wallet with only gas can run a full loop through `ParallaxTryout` | tx, test | "v5 live" in [`deployments/tx-proofs.md`](../deployments/tx-proofs.md) (filled 6 blocks after the crash); `test_fullLoop_tryout` |
+| A brand-new wallet with only gas (no tokens, nonce 0) can run a full loop through `ParallaxTryout` | tx, test | "v5 live" in [`deployments/tx-proofs.md`](../deployments/tx-proofs.md) (filled 6 blocks after the crash); `test_fullLoop_tryout` |
 | Vault deposits can't be sandwiched | test | `test_deposit_sandwichGainsNothing`, `test_deposit_pullsOnlyProportionalAmounts` |
 | A leaked owner key can be retired | test | `test_ownership_twoStepTransfer` |
 | Events lost during a debt pause can't leave a rule firing forever or never | test | `test_debtPause_missedExecuted_staleRuleIsDroppedNotRefired`, `test_debtPause_missedCreated_recoveredByReannounce`, `test_debtPause_missedCancelled_recoveredByRuleSettled`, `test_resync_reannouncesActiveAndSettledRules`; invariant suite with lost logs |
