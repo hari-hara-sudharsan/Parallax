@@ -147,3 +147,14 @@ two-step `transferOwnership` → `acceptOwnership` flow (`contracts/src/base/Two
 
 Check: `cast call <contract> "owner()(address)" --rpc-url https://lasna-rpc.rnk.dev/`
 The executors need no handover: they only accept callbacks from Reactive's callback proxy on behalf of the reactive contract.
+
+## Funding for judging (2026-11-21)
+
+The exposed deployer's remaining lREACT was moved into the contracts it pays for (`depositTo` on the system contract):
+
+| Contract | Deposit | tx (Lasna) | Reserves after |
+|---|---|---|---|
+| ParallaxVaultReactive `0xca72…9a2c` (had 0 reserves and 0.0026 lREACT debt, so it was paused) | 0.6 lREACT | `0xa91737f5c68cbbe33b0520b6a949cc02a5aef6436a1b0543cc6c80c660e09655` | 0.597, debt 0 |
+| ParallaxReactive v5 `0x2FCF…7cf3` | 2.5 lREACT | `0x2cdf288ce08ea68c595d3e9ef86599be06163c7a7d32e7ddf474c3b28a4f8100` | 3.46, debt 0 (≈ 55 loops at 0.063) |
+
+Callback gas: executors hold 0.0003–0.0005 testnet ETH each; a callback costs ≈ 0.000000002 ETH (`results/costs.md`).
