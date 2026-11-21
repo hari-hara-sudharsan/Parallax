@@ -49,8 +49,10 @@ export function TryoutPanel() {
   }, [run?.crashAt, run?.filledAt]);
 
   // Follow the loop: mirrored on Lasna → (after the crash) RuleTriggered on Lasna → execution record on the executor.
+  // Restart polling only when a new rule is armed (or the chain changes); the loop reads the latest run from runRef.
+  const ruleId = run?.ruleId;
   useEffect(() => {
-    if (!run) return;
+    if (ruleId === undefined) return;
     let stop = false;
     const id = setInterval(async () => {
       const r = runRef.current;
@@ -104,7 +106,7 @@ export function TryoutPanel() {
       stop = true;
       clearInterval(id);
     };
-  }, [run?.ruleId, chain]);
+  }, [ruleId, chain]);
 
   async function onArm() {
     setRun(null);

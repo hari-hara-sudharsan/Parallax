@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useActivity, type FeedItem } from "@/hooks/useActivity";
 import { usePool } from "@/hooks/usePool";
 import { CHAINS, LINKS } from "@/lib/deployment";
