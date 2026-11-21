@@ -134,3 +134,16 @@ To re-check one: `forge verify-contract --verifier sourcify --chain <id> <addres
 | ParallaxVault v2 | Base Sepolia 84532 | `0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |
 | ParallaxVaultReactive v1 | Lasna 5318007 | `0x5A9f48A2686245eB7418b5a15aF2D4A431251D02` | retired: quiet-pool bug (see tx-proofs.md) |
 | ParallaxVault v1 | Base Sepolia 84532 | `0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49` | retired |
+
+## Ownership handover (2026-11-21)
+
+The original deployer key was exposed, so ownership of both Lasna contracts moved to a fresh wallet through the
+two-step `transferOwnership` → `acceptOwnership` flow (`contracts/src/base/TwoStepOwnable.sol`).
+
+| Contract | New owner | acceptOwnership tx (Lasna) |
+|---|---|---|
+| ParallaxReactive v5 `0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3` | `0x5bb83E60a7a05A0e1b077B66412a26306e334208` | `0x39e26b98912596f4456ede382ab096c3b0f8eef1def944d97607d036147ded1e` |
+| ParallaxVaultReactive `0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c` | `0x5bb83E60a7a05A0e1b077B66412a26306e334208` | `0x443a0df9cb50db66ae2b7b9d421d96576e67e8ea082d99bbf4664c25cbb94e8c` |
+
+Check: `cast call <contract> "owner()(address)" --rpc-url https://lasna-rpc.rnk.dev/`
+The executors need no handover: they only accept callbacks from Reactive's callback proxy on behalf of the reactive contract.
