@@ -129,6 +129,10 @@ case "$cmd" in
     (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
     (cd "$ROOT/bench" && CHAIN="$SEL" node keeper.mjs "${1:-10}") ;;
 
+  tryout)           # CHAIN=base ./tw.sh tryout    → one live loop through ParallaxTryout (arm → crash → filled)
+    (cd "$ROOT/bench" && [[ -d node_modules ]] || npm install --no-fund --no-audit --silent)
+    (cd "$ROOT/bench" && CHAIN="$SEL" node tryout.mjs) ;;
+
   check-links)      # ./tw.sh check-links        → every tx linked in the docs exists on its chain
     (cd "$ROOT/bench" && node check-links.mjs) ;;
 
@@ -220,6 +224,7 @@ Parallax
   rule <id>           a rule's status + its on-chain execution record
   keeper <N>          off-chain keeper-bot baseline on the same pool (for comparison)
   bench <N>           N automated live rounds → results/<chain>-<date>.json + results/SUMMARY.md
+  tryout              one live loop through ParallaxTryout: arm a stop, crash it, watch Reactive fill it
   check-links         verify every transaction linked in the docs exists on its chain
   refusals            on-chain proof of each safety refusal (unauthorized, in-band, stale, dedupe, cancel)
   abis                regenerate web/src/lib/generated/abis.ts

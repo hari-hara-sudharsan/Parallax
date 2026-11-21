@@ -1,0 +1,17 @@
+{
+  "chain": "base",
+  "ranAt": "2026-11-21T09:11:42.807Z",
+  "tryout": "0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44",
+  "executor": "0x98f96fd0b1cb9B723157D3686446004EcA066982",
+  "reactive": "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3",
+  "ruleId": 1,
+  "armTx": "0x49f7b0a1537949e94da34cbf4744ef64ce9debc7f86cff127d0878425cbfae71",
+  "originTx": "0xca4708bb597630b4572b16cba2f5c6730a02e61448f1bfd301098b6f261fb476",
+  "reactiveTx": "0x9bf0a719ea61af5e9042c711eee9b4a2c54ae23fadcc9308a5ee77a160f74e1d",
+  "callbackTx": "0x5572a54048f0a2ee571d4a91f1545bbac71fed5ee33ab2dc24808898b14f20d2",
+  "recordedOrigin": "0xca4708bb597630b4572b16cba2f5c6730a02e61448f1bfd301098b6f261fb476",
+  "latencyBlocks": 6,
+  "latencySeconds": 1,
+  "ok": true,
+  "restoreTx": "0x31472258843ba01968089122328f776583cb17c1701df1ef4c06e95eff3b679c"
+}

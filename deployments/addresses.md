@@ -67,12 +67,17 @@ Scripts write these automatically to `contracts/deployments/<chainId>.json`; cop
 
 | Contract | Chain | Address | Tx |
 |---|---|---|---|
+| **ParallaxReactive v5** (current: Panic Exit, resync, two-step owner) | Lasna | [`0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3`](https://lasna.reactscan.net/address/0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3) | |
+| **ParallaxExecutor v5** (current) | **Base Sepolia** | [`0x98f96fd0b1cb9B723157D3686446004EcA066982`](https://sepolia.basescan.org/address/0x98f96fd0b1cb9B723157D3686446004EcA066982) | |
+| **ParallaxExecutor v5** (current) | Unichain Sepolia | [`0x391eecF06CA701b891498040D1CEFed90d500030`](https://sepolia.uniscan.xyz/address/0x391eecF06CA701b891498040D1CEFed90d500030) | |
+| **ParallaxTryout** (zero-setup judge path) | **Base Sepolia** | [`0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44`](https://sepolia.basescan.org/address/0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44) | |
+| **ParallaxTryout** | Unichain Sepolia | [`0xacD95E9891d4C29871b643e3C5bF99a3D4d20AFA`](https://sepolia.uniscan.xyz/address/0xacD95E9891d4C29871b643e3C5bF99a3D4d20AFA) | |
 | MockWETH (mWETH) | Unichain Sepolia | [`0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5`](https://sepolia.uniscan.xyz/address/0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5) | |
 | MockUSDC (mUSDC) | Unichain Sepolia | [`0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c`](https://sepolia.uniscan.xyz/address/0x0bE64D69008Afbef624B2ea7A5062a53E844Dc6c) | |
 | Demo pool mUSDC/mWETH 0.3% (poolId) | Unichain Sepolia | `0xade8c1a33dc66fd63e7f08b4af96a01c31ab4c5346a374a5d82d4d3a6f89763c` | |
-| **ParallaxReactive v4.1** (current: raise-gas fix + lint hardening) | Lasna | [`0xDf554201dec784F0541FA5fc884240c73113e334`](https://lasna.reactscan.net/address/0xDf554201dec784F0541FA5fc884240c73113e334) | |
-| **ParallaxExecutor v4.1** (current) | **Base Sepolia** | [`0x2f772766ec926359093FA2d478FBDdcd828304Ff`](https://sepolia.basescan.org/address/0x2f772766ec926359093FA2d478FBDdcd828304Ff) | |
-| **ParallaxExecutor v4.1** (current) | Unichain Sepolia | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) | |
+| ParallaxReactive v4.1 (raise-gas fix + lint hardening) | Lasna | [`0xDf554201dec784F0541FA5fc884240c73113e334`](https://lasna.reactscan.net/address/0xDf554201dec784F0541FA5fc884240c73113e334) | |
+| ParallaxExecutor v4.1 | Base Sepolia | [`0x2f772766ec926359093FA2d478FBDdcd828304Ff`](https://sepolia.basescan.org/address/0x2f772766ec926359093FA2d478FBDdcd828304Ff) | |
+| ParallaxExecutor v4.1 | Unichain Sepolia | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) | |
 | ParallaxReactive v4 (first live trailing + re-centre run) | Lasna | [`0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042`](https://lasna.reactscan.net/address/0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042) | |
 | ParallaxExecutor v4 | Base Sepolia | [`0x058a746A2719CD0F0d4e29D4EcCC9900B6cF254e`](https://sepolia.basescan.org/address/0x058a746A2719CD0F0d4e29D4EcCC9900B6cF254e) | |
 | ParallaxExecutor v4 | Unichain Sepolia | [`0xD83DE781AF09aCC1a2587f9e3A86426FfD36Ec9F`](https://sepolia.uniscan.xyz/address/0xD83DE781AF09aCC1a2587f9e3A86426FfD36Ec9F) | |
@@ -97,7 +102,14 @@ Every live contract is verified with an **exact match** (creation and runtime by
 
 | Contract | Chain | Sourcify |
 |---|---|---|
-| ParallaxReactive v4.1 | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0xDf554201dec784F0541FA5fc884240c73113e334) |
+| **ParallaxReactive v5** | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3) |
+| **ParallaxExecutor v5** | Base Sepolia 84532 | [exact match](https://repo.sourcify.dev/84532/0x98f96fd0b1cb9B723157D3686446004EcA066982) |
+| **ParallaxExecutor v5** | Unichain Sepolia 1301 | [exact match](https://repo.sourcify.dev/1301/0x391eecF06CA701b891498040D1CEFed90d500030) |
+| **ParallaxTryout** | Base Sepolia 84532 | [exact match](https://repo.sourcify.dev/84532/0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44) |
+| **ParallaxTryout** | Unichain Sepolia 1301 | [exact match](https://repo.sourcify.dev/1301/0xacD95E9891d4C29871b643e3C5bF99a3D4d20AFA) |
+| **ParallaxVaultReactive v3** | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c) |
+| **ParallaxVault v3** | Base Sepolia 84532 | [exact match](https://repo.sourcify.dev/84532/0x9c868A6e74a1D00cc0cD1524AED57c35515c4899) |
+| ParallaxReactive v4.1 (retired) | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0xDf554201dec784F0541FA5fc884240c73113e334) |
 | ParallaxExecutor v4.1 | Base Sepolia 84532 | [exact match](https://repo.sourcify.dev/84532/0x2f772766ec926359093FA2d478FBDdcd828304Ff) |
 | ParallaxExecutor v4.1 | Unichain Sepolia 1301 | [exact match](https://repo.sourcify.dev/1301/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
 | ParallaxVaultReactive v2 | Lasna 5318007 | [exact match](https://repo.sourcify.dev/5318007/0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24) |
@@ -116,7 +128,9 @@ To re-check one: `forge verify-contract --verifier sourcify --chain <id> <addres
 
 | Contract | Chain | Address | Notes |
 |---|---|---|---|
-| **ParallaxVaultReactive v2 (current)** | Lasna 5318007 | `0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24` | breaker 200 ticks / 60 s window / 60 s calm |
-| **ParallaxVault v2 (current)** | Base Sepolia 84532 | `0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |
+| **ParallaxVaultReactive v3 (current: two-step owner)** | Lasna 5318007 | `0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c` | breaker 200 ticks / 60 s window / 60 s calm |
+| **ParallaxVault v3 (current: proportional deposits)** | Base Sepolia 84532 | `0x9c868A6e74a1D00cc0cD1524AED57c35515c4899` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |
+| ParallaxVaultReactive v2 | Lasna 5318007 | `0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24` | breaker 200 ticks / 60 s window / 60 s calm |
+| ParallaxVault v2 | Base Sepolia 84532 | `0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F` | demo pool mWETH/mUSDC, range ±300 ticks, slippage 3% |
 | ParallaxVaultReactive v1 | Lasna 5318007 | `0x5A9f48A2686245eB7418b5a15aF2D4A431251D02` | retired: quiet-pool bug (see tx-proofs.md) |
 | ParallaxVault v1 | Base Sepolia 84532 | `0xaA5c9bB91D62F09850A4EAe2Cb7F8fc86c6aFC49` | retired |

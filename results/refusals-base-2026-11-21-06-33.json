@@ -3,7 +3,7 @@
   "chainId": 84532,
   "executor": "0x2f772766ec926359093FA2d478FBDdcd828304Ff",
   "reactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
-  "ranAt": "2026-11-21T06:34:47.924Z",
+  "ranAt": "2026-11-21T09:03:16.175Z",
   "results": {
     "unauthorized": {
       "claim": "Only the Callback Proxy, carrying our reactive contract, can call execute()",
@@ -29,6 +29,21 @@
     "stale": {
       "proven": false,
       "error": "RPC Request failed."
+    },
+    "dedupe": {
+      "proven": false,
+      "error": "timeout waiting for reactive tx"
+    },
+    "cancelled": {
+      "claim": "A cancelled rule is unmirrored on Lasna and never fires",
+      "ruleId": 14,
+      "createTx": "0xc422bae938745fac31145d6edc66d028119839e6cfe6ea71eb626741136ec1f7",
+      "cancelTx": "0xda98fe1e6d2a747d8a14132a09d7ea3c0b1677b1d5ade145ffaceb65a8c4cf45",
+      "removedTx": "0x7c93ffcb6ccd19c334512fccbb2b0b2c11925bb45a07adb42eac81655c634005",
+      "crossTx": "0xbaeba29481052af2315f8ef3248f2186e4eef175f098f2040a2ba856cec05f4a",
+      "triggers": 0,
+      "executions": 0,
+      "proven": true
     }
   }
 }

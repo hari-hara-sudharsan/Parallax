@@ -38,7 +38,7 @@ The latency figures come from that on-chain record, not from our stopwatch.
 Or check from a terminal, read-only, no wallet or key (needs Foundry's `cast`):
 
 ```bash
-RPC=https://sepolia.base.org; EXEC=0x2f772766ec926359093FA2d478FBDdcd828304Ff
+RPC=https://sepolia.base.org; EXEC=0x2f772766ec926359093FA2d478FBDdcd828304Ff   # v4.1 executor (rule 1 below)
 # 1. The executor's own record of rule 1 (the live trailing stop): origin tx, origin block 59074364,
 #    executed block 59074376 (12 blocks later), executed timestamp
 cast call --rpc-url $RPC $EXEC "executions(uint256)(uint256,uint64,uint64,uint64)" 1
@@ -47,7 +47,7 @@ cast call --rpc-url $RPC --from 0x000000000000000000000000000000000000dEaD $EXEC
   "execute(address,uint256,int24,uint256,uint256)" 0x000000000000000000000000000000000000dEaD 1 0 0 0
 # 3. The reactive contract on Lasna is funded and has no debt (debt > 0 pauses it)
 cast call --rpc-url https://lasna-rpc.rnk.dev/ 0x8888888888888888888888888888888888888888 \
-  "debt(address)(uint256)" 0xDf554201dec784F0541FA5fc884240c73113e334
+  "debt(address)(uint256)" 0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3
 # 4. Every transaction linked in these docs exists on its chain
 node bench/check-links.mjs
 ```
@@ -245,12 +245,15 @@ All live contracts are **source-verified on Sourcify with an exact match**:
 
 | Contract | Chain | Address |
 |---|---|---|
-| **ParallaxReactive v4.1** (guards both chains) | Reactive Lasna (5318007) | [`0xDf554201dec784F0541FA5fc884240c73113e334`](https://lasna.reactscan.net/address/0xDf554201dec784F0541FA5fc884240c73113e334) |
-| **ParallaxExecutor v4.1** | Base Sepolia (84532) | [`0x2f772766ec926359093FA2d478FBDdcd828304Ff`](https://sepolia.basescan.org/address/0x2f772766ec926359093FA2d478FBDdcd828304Ff) |
-| **ParallaxExecutor v4.1** | Unichain Sepolia (1301) | [`0x5F4159fEF569FbDe44C069751A57e38e97b1109D`](https://sepolia.uniscan.xyz/address/0x5F4159fEF569FbDe44C069751A57e38e97b1109D) |
-| **ParallaxVaultReactive v2** (vault brain) | Reactive Lasna (5318007) | [`0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24`](https://lasna.reactscan.net/address/0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24) |
-| **ParallaxVault v2** (`pxLP`) | Base Sepolia (84532) | [`0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F`](https://sepolia.basescan.org/address/0x94Bdad7429FAF003f2aDda78B04aB901A5f10C8F) |
+| **ParallaxReactive v5** (guards both chains, relays Panic Exit) | Reactive Lasna (5318007) | [`0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3`](https://lasna.reactscan.net/address/0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3) |
+| **ParallaxExecutor v5** | Base Sepolia (84532) | [`0x98f96fd0b1cb9B723157D3686446004EcA066982`](https://sepolia.basescan.org/address/0x98f96fd0b1cb9B723157D3686446004EcA066982) |
+| **ParallaxExecutor v5** | Unichain Sepolia (1301) | [`0x391eecF06CA701b891498040D1CEFed90d500030`](https://sepolia.uniscan.xyz/address/0x391eecF06CA701b891498040D1CEFed90d500030) |
+| **ParallaxTryout** (try it with only gas) | Base Sepolia (84532) | [`0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44`](https://sepolia.basescan.org/address/0xb56bf536CB864a4A848F00C1b4ebF27c6f1cAe44) |
+| **ParallaxTryout** | Unichain Sepolia (1301) | [`0xacD95E9891d4C29871b643e3C5bF99a3D4d20AFA`](https://sepolia.uniscan.xyz/address/0xacD95E9891d4C29871b643e3C5bF99a3D4d20AFA) |
+| **ParallaxVaultReactive v3** (vault brain) | Reactive Lasna (5318007) | [`0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c`](https://lasna.reactscan.net/address/0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c) |
+| **ParallaxVault v3** (`pxLP`) | Base Sepolia (84532) | [`0x9c868A6e74a1D00cc0cD1524AED57c35515c4899`](https://sepolia.basescan.org/address/0x9c868A6e74a1D00cc0cD1524AED57c35515c4899) |
 | Demo pool mUSDC / mWETH 0.3% (real Uniswap v4) | both | poolId `0xade8c1a3…6f89763c` |
+| v4.1 (refusal room, trailing raises) | Lasna / Base / Unichain | `0xDf55…e334` / `0x2f77…04Ff` / `0x5F41…109D` |
 | v4 (first live trailing + re-centre run) | Lasna / Base / Unichain | `0x7b8f…e042` / `0x058a…254e` / `0xD83D…Ec9F` |
 | v3 (the 44-round benchmark) | Lasna / Base / Unichain | `0x52e2…eC89` / `0x4d4f…Cbf9` / `0x8633…1181` |
 

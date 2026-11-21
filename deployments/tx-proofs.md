@@ -5,6 +5,18 @@
 Each row is one complete, unattended Parallax execution on testnet. No keeper and no script triggered the callback:
 Reactive Network saw the origin event and did the rest. Reproduce any row with `./tw.sh proof <originTx>`.
 
+## v5 live: the zero-setup judge path (Base Sepolia, 2026-11-21)
+
+`ParallaxTryout` armed a funded stop for a wallet holding only gas, then crashed the price just past it. Reactive did
+the rest. Run it yourself: `CHAIN=base ./tw.sh tryout`.
+
+| Step | Chain | Tx |
+|---|---|---|
+| `arm()`: stop one tick spacing below spot (rule 1) | Base | [`0x49f7b0a1…`](https://sepolia.basescan.org/tx/0x49f7b0a1537949e94da34cbf4744ef64ce9debc7f86cff127d0878425cbfae71) · mirrored on Lasna 1.8 s later |
+| **① Origin: `crash(1)`**, tick 201277 → 201357 | Base | [`0xca4708bb…`](https://sepolia.basescan.org/tx/0xca4708bb597630b4572b16cba2f5c6730a02e61448f1bfd301098b6f261fb476) |
+| **② Reactive** `RuleTriggered` | Lasna | [`0x9bf0a719…`](https://lasna.reactscan.net/tx/0x9bf0a719ea61af5e9042c711eee9b4a2c54ae23fadcc9308a5ee77a160f74e1d) |
+| **③ Callback**: stop sold | Base | [`0x5572a540…`](https://sepolia.basescan.org/tx/0x5572a54048f0a2ee571d4a91f1545bbac71fed5ee33ab2dc24808898b14f20d2) · **6 blocks ≈ 1.2 s** after the crash |
+
 ## Headline: v3 live benchmark (multi-chain, 2026-11-15)
 
 **44 / 44 live rounds filled, no keeper, real Uniswap v4.** Full per-round table with every tx hash:

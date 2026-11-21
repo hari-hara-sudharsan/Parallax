@@ -1,14 +1,18 @@
 {
-  "parallaxReactive": "0xDf554201dec784F0541FA5fc884240c73113e334",
-  "parallaxReactiveBlock": 8399503,
+  "parallaxReactive": "0x2FCF8025bC42a2902dA7Ddc46A0F1d617B197cf3",
+  "parallaxReactiveBlock": 8881285,
   "parallaxReactiveBlockV3": 8388324,
   "parallaxReactiveBlockV4": 8396898,
+  "parallaxReactiveBlockV41": 8399503,
   "parallaxReactiveV1": "0x6D489Fa6F5c837B79A7FF8Dcc2B488CbD14309A5",
   "parallaxReactiveV2": "0xC3C04592057E816EB706eF0E9A9438267537B2A2",
   "parallaxReactiveV3": "0x52e292188E7f8dB587cB60fdd683100A8815eC89",
   "parallaxReactiveV4": "0x7b8f381783F33Fd75cdF9Dc3AFC1E02fB020e042",
-  "parallaxVaultReactive": "0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24",
-  "parallaxVaultReactiveBlock": 8404251,
+  "parallaxReactiveV41": "0xDf554201dec784F0541FA5fc884240c73113e334",
+  "parallaxVaultReactive": "0xca72ebe1E4BD79323EC0bBbc2dd1188999B39a2c",
+  "parallaxVaultReactiveBlock": 8881631,
+  "parallaxVaultReactiveBlockV2": 8404251,
   "parallaxVaultReactiveV1": "0x5A9f48A2686245eB7418b5a15aF2D4A431251D02",
-  "parallaxVaultReactiveV1Block": 8403219
+  "parallaxVaultReactiveV1Block": 8403219,
+  "parallaxVaultReactiveV2": "0x4dDaD9D71Bd31bF69E6c12ab103123870BBC3A24"
 }
