@@ -1,4 +1,5 @@
 # Demo video and pitch: step by step (target 2:50, hard limit 3:00)
+n> Beginner, click-by-click version: **`docs/demo-walkthrough.md`**.
 
 Everything below uses the live dashboard (https://parallax-kappa-six.vercel.app) and the v5 contracts. Every number
 quoted in the voice-over is in `results/` and on-chain, so say them exactly as written.
