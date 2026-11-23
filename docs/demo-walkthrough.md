@@ -62,14 +62,17 @@ Open exactly these 3 tabs, in this order:
    - **You should see:** your short address top right.
 3. Top of the page: the switch **Base | Unichain**. Click **Unichain**.
    - If a button **Switch to Unichain** appears top right, click it and approve in MetaMask.
-4. Find the panel **Run a loop yourself**. Click **1 · Arm a stop**. MetaMask opens: click **Confirm**.
-   - **You should see:** a list starting "0 · Stop armed (rule N)", then "mirrored on Lasna" within about 10 seconds.
-   - **Don't** click "2 · Crash it" here. This rule on Unichain is used for the Panic Exit shot later.
+4. Scroll to **Panic Exit**. It must show **Base 1 · Unichain 1** active rules.
+   - These are stops **owned by your wallet**, 15% below the price, so nothing fires them by accident. Rules made with
+     **Arm a stop** belong to the tryout contract and never count here.
+   - **If it shows 0** (for example after a take where you already pressed Panic): ask Claude to "re-create the panic
+     rules". Claude mints 1 test mWETH and creates one far stop on each chain with your wallet (`08_CreatePriceRule`,
+     `RULE_MOVE_BPS=1500`).
 5. Click **Base** in the **Base | Unichain** switch. If **Switch to Base** appears top right, click it and approve.
 6. Look at **Is it awake?**
    - **You should see:** a green **live** chip, some lREACT, "≈ N more loops" and no debt.
    - **If not** ("paused: in debt" or "low on lREACT"): stop and do Part B first.
-7. Wait **one full minute** after step 4. The tryout contract lets each wallet arm once per 60 seconds.
+7. If you clicked **Arm a stop** while testing, wait **one full minute** before recording. The tryout contract lets each wallet arm once per 60 seconds.
 8. Go back to Tab 1 and scroll to the very top of the landing page.
 
 You are ready. Start the recorder (**Windows + Alt + R**).
@@ -105,10 +108,10 @@ Speak slowly. Pause one second between scenes; you can trim pauses later. The wo
 - **Say:** "Every hop is a real transaction: the swap on Base, the reactive transaction on Lasna, and the callback back on Base. The latency is stored in the executor's own storage, so anyone can check it."
 
 ### Scene 6 · Panic Exit (1:35–1:55)
-- **Do:** scroll to **Panic Exit**. It should show **Unichain: 1** active rule (from Part E). Click **Panic: close all … on both chains**, then **Confirm**.
+- **Do:** scroll to **Panic Exit**. It should show **Base 1 · Unichain 1** (from Part E). Click **Panic: close all … on both chains**, then **Confirm**.
 - **Wait** for the line "Unichain: closed 1 in … · N s later".
 - **Say:** "One more thing a bot can't give you: Panic Exit. One transaction on Base closes everything I have, and Reactive closes my rules on Unichain too, a few seconds later."
-- **If Panic shows 0 active:** the Unichain rule from Part E is missing. Skip this scene; it is also proven in `deployments/tx-proofs.md`.
+- **If Panic shows 0 active:** your own rules from Part E are missing. Skip this scene (it is also proven in `deployments/tx-proofs.md`), or stop and have Claude re-create them.
 
 ### Scene 7 · What if the price moved (1:55–2:10)
 - **Do:** scroll to **What if the price moved?** Drag the slider slowly to **−10%**, then to **+10%**.

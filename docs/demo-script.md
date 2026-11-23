@@ -21,8 +21,8 @@ quoted in the voice-over is in `results/` and on-chain, so say them exactly as w
 ## 2. Ten minutes before recording
 
 1. Open the dashboard → **Guards**. **Is it awake?** must say **live** with no debt. If it says "paused" or "low", stop and top up first.
-2. Connect MetaMask (new wallet), switch to **Unichain Sepolia**, click **Run a loop yourself → 1 · Arm a stop**, confirm. Leave that rule armed (it is used for Panic Exit in shot 6). Do **not** crash it.
-3. Switch back to **Base Sepolia**.
+2. Connect MetaMask (new wallet) on **Base Sepolia**. **Panic Exit** must show **Base 1 · Unichain 1**: far stops (15% below) owned by your wallet. Tryout rules from **Arm a stop** are owned by the tryout contract and never count for Panic. If it shows 0, re-create them (`08_CreatePriceRule`, `RULE_MOVE_BPS=1500`, signed by the new wallet).
+3. Stay on **Base Sepolia**.
 4. Wait at least 60 seconds after any earlier **Arm**: the tryout contract has a 60-second cooldown per wallet.
 5. Scroll to the top of the landing page.
 
@@ -35,7 +35,7 @@ quoted in the voice-over is in `results/` and on-chain, so say them exactly as w
 | **0:30–0:40** | Click **Open the app**. Point at **Is it awake?** (live, lREACT, loops left). | "This panel shows it's live and funded. A reactive contract in debt stops, so we show the runway openly." |
 | **0:40–1:20** | **Run a loop yourself → 1 · Arm a stop**, confirm in MetaMask. Wait for "mirrored on Lasna". Click **2 · Crash it**, confirm. Keep still while hops 1 → 2 → 3 turn green and the latency appears. | "With only gas, anyone can run a real loop. One click arms a funded stop, just under the price. Reactive mirrors it on its own chain. Now I crash the price through it. I don't press anything else. Reactive sees the swap, decides the rule crossed and calls back. The executor re-checks the price on-chain and sells. That was *[read the number]* blocks." |
 | **1:20–1:35** | Click the three transaction links in the panel (origin and callback open Basescan, reactive opens Reactscan). Show each for ~3 s. | "Every hop is a real transaction: the swap, the reactive transaction on Lasna, and the callback. The latency is stored in the executor's own contract storage, so anyone can check it." |
-| **1:35–1:55** | Scroll to **Panic Exit**. Show "Base 0/1 · Unichain 1" (the rule armed in section 2). Click **Panic: close all**, confirm. Wait for "Unichain: closed … s later". | "One more thing no bot gives you: Panic Exit. One transaction on Base closes everything I have, and Reactive closes my rules on Unichain too, a few seconds later." |
+| **1:35–1:55** | Scroll to **Panic Exit**. Show "Base 1 · Unichain 1" (your own rules from section 2). Click **Panic: close all**, confirm. Wait for "Unichain: closed … s later". | "One more thing no bot gives you: Panic Exit. One transaction on Base closes everything I have, and Reactive closes my rules on Unichain too, a few seconds later." |
 | **1:55–2:10** | Scroll to **What if the price moved?** and drag the slider to −10%, then +10%. | "Here I can drag the price and see which armed rules would fire, using the executor's own trigger test on live rules." |
 | **2:10–2:30** | Click **Proof** at the top. Show **What a second is worth**, then scroll to **What it refuses to do**. | "We measured it. Across 174 live rounds the median on Base is 1.4 seconds, faster than a keeper bot on the same pool at 2 seconds. On the October 2025 ETH crash, that speed keeps about three hundred dollars per hundred thousand against old Reactive, in the worst seconds. And these five refusals are real transactions: outsiders can't trigger it, stale triggers are skipped, and nothing sells twice." |
 | **2:30–2:45** | Switch to tab 2 (GitHub README), scroll to **For judges**. | "Everything is open source and verified on Sourcify: 119 tests, fuzzing in random order, every mutant caught, and a page mapping each judging criterion to its evidence." |

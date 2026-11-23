@@ -11,10 +11,9 @@ No bot, no server, no hot key, and nothing you run has to stay online.
 
 > Reactive Omni Buildathon · Track 1 **Every Second Counts** · built Nov 2026 · MIT
 
-<!-- VIDEO: add the demo video link here, e.g. | **Demo video (2:50)** | https://youtu.be/... | -->
-
 | | |
 |---|---|
+| 🎬 **Demo video** | **[Watch the live loop on YouTube](https://youtu.be/BcsHh7sqcsM)**: arm a stop, crash the price, Reactive fires and the executor sells on-chain, then Panic Exit on both chains |
 | ⚡ **Speed** | **Median 7 Base blocks ≈ 1.4 s** from the price-crossing swap to the executed sell (p90 2.0 s, fastest 0.8 s) over **174 live rounds** on two chains, every tx hash published |
 | 💰 **Why seconds matter** | Replaying the 10 Oct 2025 crash, a 1.4 s fill keeps **$325 per $100k** at the worst 5% of seconds vs the same loop on legacy Reactive ([method](results/what-a-second-buys.md)) |
 | 🤖 **vs a keeper bot** | Same pool, same crossing swap: a 250 ms-polling bot with a warm RPC needs **10 blocks ≈ 2.0 s**. Parallax is **~30% faster** and needs no infrastructure |

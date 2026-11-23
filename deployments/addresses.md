@@ -156,5 +156,6 @@ The exposed deployer's remaining lREACT was moved into the contracts it pays for
 |---|---|---|---|
 | ParallaxVaultReactive `0xca72…9a2c` (had 0 reserves and 0.0026 lREACT debt, so it was paused) | 0.6 lREACT | `0xa91737f5c68cbbe33b0520b6a949cc02a5aef6436a1b0543cc6c80c660e09655` | 0.597, debt 0 |
 | ParallaxReactive v5 `0x2FCF…7cf3` | 2.5 lREACT | `0x2cdf288ce08ea68c595d3e9ef86599be06163c7a7d32e7ddf474c3b28a4f8100` | 3.46, debt 0 (≈ 55 loops at 0.063) |
+| ParallaxReactive v5 `0x2FCF…7cf3` (2026-11-23, from the new wallet `0x5bb8…4208`) | 5 lREACT, bought with 0.05 SepETH ([faucet tx](https://sepolia.etherscan.io/tx/0xb2f3933bea83dee74a8e221435923babb7067453838680cc54ec4ddb5d0f58ea)) | `0x1dc993e7188d2d3c925ef39e026f9b567a9c6c9054651cb7d804069bc77ab4c8` | 8.35, debt 0 (≈ 132 loops at 0.063) |
 
 Callback gas: executors hold 0.0003–0.0005 testnet ETH each; a callback costs ≈ 0.000000002 ETH (`results/costs.md`).

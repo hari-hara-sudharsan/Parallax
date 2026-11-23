@@ -19,7 +19,7 @@ the event.
 | D · v5 contracts | ✅ Panic Exit, Tryout, resync, NOT_ACTIVE healing, TwoStepOwnable, vault v3 pro-rata · ✂️ cut: Cron retry (documented as a limitation), TP ladder, depeg |
 | E · v5 live proof | ✅ 132 Base / 42 Unichain / 70 keeper rounds, burst, cross-chain panic, fresh-wallet tryout |
 | F · Dashboard | ✅ tryout, ledger, refusal room, what-if slider, health, panic, speed-and-money; deployed to Vercel |
-| G · Docs and submit | ✅ README for judges, setup guide, tag `v5-submission` · ⏳ video and DoraHacks form (user), funding top-up before Dec 4 |
+| G · Docs and submit | ✅ README for judges, setup guide, tag `v5-submission`, video (https://youtu.be/BcsHh7sqcsM), funding top-up (8.35 lREACT, 2026-11-23) · ⏳ DoraHacks form (user) |
 
 ## What we take from the field
 
